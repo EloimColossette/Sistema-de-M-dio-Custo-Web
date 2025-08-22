@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Entrada de NF</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/entrada_nf.css') }}" />
+  <link rel="icon" href="{{ url_for('static', filename='logos/Kametal.ico') }}" type="image/x-icon" />
+</head>
+<body>
+  <div id="entrada-nf-page">
+    <!-- CARD “Entrada de NF” -->
+    <div class="card card-add">
+      <div class="card-header">
+        <h2>Entrada de Nota Fiscal</h2>
+        <a href="{{ url_for('dashboard.dashboard') }}" class="btn-back-dashboard">← Dashboard</a>
+      </div>
+      <div class="card-body">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages">
+              {% for category, msg in messages %}
+                <div class="flash {{ category }}">{{ msg }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <!-- FORMULÁRIO PRINCIPAL -->
+        <form id="form-nova-entrada" action="{{ url_for('entrada_nf.salvar_entrada') }}" method="post">
+          <div class="form-row horizontal">
+            <div class="form-group">
+              <label for="data_nf">Data:</label>
+              <input type="date" id="data_nf" name="data" required />
+            </div>
+            <div class="form-group w-nf">
+              <label for="numero_nf">Número NF:</label>
+              <input type="text" id="numero_nf" name="nf" placeholder="Número" required />
+            </div>
+            <div class="form-group w-cliente">
+              <label for="fornecedor_nf">Fornecedor:</label>
+              <select id="fornecedor_nf" name="fornecedor">
+                <option value="">Nenhum</option>
+                {% for nome in fornecedores %}
+                  <option value="{{ nome }}">{{ nome }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- Materiais e Valores -->
+          <fieldset class="materiais-fieldset">
+            <legend>Materiais / Valor Unitário</legend>
+            <div id="materiais-container">
+              {% for i in range(3) %}
+                {% set idx = i + 1 %}
+                <div class="form-row horizontal align-end material-row">
+                  <div class="form-group">
+                    <label for="material_{{idx}}">Material {{idx}}:</label>
+                    <select id="material_{{idx}}" name="material_{{idx}}">
+                      <option value="">Selecione o material</option>
+                      {% for mat in materiais %}
+                        <option value="{{ mat }}">{{ mat }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="valor_unitario_{{idx}}">Valor Unit. {{idx}}:</label>
+                    <input
+                      type="number" step="0.01"
+                      id="valor_unitario_{{idx}}"
+                      name="valor_unitario_{{idx}}"
+                    />
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+
+            <div class="btns-material">
+              <button type="button" id="btn-add-material" class="btn btn-secondary btn-sm">+ Adicionar Material</button>
+              <button type="button" id="btn-remove-material" class="btn btn-danger btn-sm">– Remover Material</button>
+            </div>
+          </fieldset>
+
+          <!-- Duplicatas -->
+          <fieldset class="duplicatas-fieldset">
+            <legend>Duplicatas</legend>
+            <div id="duplicatas-container">
+              {% for i in range(3) %}
+                {% set idx = i + 1 %}
+                <div class="duplicata-row">
+                  <div class="form-group">
+                    <label for="duplicata_{{idx}}">Duplicata {{idx}}:</label>
+                    <input
+                      type="number" step="0.01"
+                      id="duplicata_{{idx}}"
+                      name="duplicata_{{idx}}"
+                    />
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+            <div class="btns-duplicata">
+              <button type="button" id="btn-add-duplicata" class="btn btn-secondary btn-sm">+ Adicionar Duplicata</button>
+              <button type="button" id="btn-remove-duplicata" class="btn btn-danger btn-sm">– Remover Duplicata</button>
+            </div>
+          </fieldset>
+
+          <!-- Dados de Produto -->
+          <div class="form-row horizontal">
+            <div class="form-group">
+              <label for="produto">Produto:</label>
+              <select id="produto" name="produto" required>
+                <option value="">Selecione o produto</option>
+                {% for p in produtos %}
+                  <option value="{{ p }}">{{ p }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="custo_empresa">Custo Empresa:</label>
+              <input type="number" step="0.01" id="custo_empresa" name="custo_empresa" required />
+            </div>
+            <div class="form-group">
+              <label for="ipi">IPI:</label>
+              <input type="number" step="0.01" id="ipi" name="ipi" />
+            </div>
+            <div class="form-group">
+              <label for="valor_integral">Valor Integral:</label>
+              <input type="number" step="0.01" id="valor_integral" name="valor_integral" required />
+            </div>
+          </div>
+
+          <div class="form-row horizontal">
+            <div class="form-group">
+              <label for="valor_unitario_energia">Val. Unit. Energia:</label>
+              <input type="number" step="0.01" id="valor_unitario_energia" name="valor_unitario_energia" />
+            </div>
+            <div class="form-group">
+              <label for="valor_mao_obra">Mão de Obra TM/Metallica:</label>
+              <input type="number" step="0.01" id="valor_mao_obra" name="valor_mao_obra_tm_metallica" />
+            </div>
+            <div class="form-group">
+              <label for="peso_liquido">Peso Líquido:</label>
+              <input type="number" step="0.01" id="peso_liquido" name="peso_liquido" required />
+            </div>
+            <div class="form-group">
+              <label for="peso_integral">Peso Integral:</label>
+              <input type="number" step="0.01" id="peso_integral" name="peso_integral" />
+            </div>
+          </div>
+
+          <!-- Botões -->
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Salvar Entrada</button>
+            <button type="button" id="btnVerEntradas" class="btn btn-secondary">Ver Entradas de NF</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal de Entradas -->
+    <div id="modal-entradas" class="modal">
+      <div class="modal-content"></div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const btnVer = document.getElementById('btnVerEntradas');
+      const modal = document.getElementById('modal-entradas');
+      btnVer.addEventListener('click', async () => {
+        const resp = await fetch(`/entrada_nf/listar?page=1`);
+        const html = await resp.text();
+        modal.querySelector('.modal-content').innerHTML = html;
+        modal.classList.add('show');
+      });
+      modal.addEventListener('click', e => {
+        if (e.target === modal) modal.classList.remove('show');
+      });
+    });
+  </script>
+
+  <script>
+    window.materiaisOptions = JSON.parse('{{ materiais | tojson | safe }}');
+  </script>
+
+  <script src="{{ url_for('static', filename='js/entrada_nf.js') }}"></script>
+</body>
+</html>

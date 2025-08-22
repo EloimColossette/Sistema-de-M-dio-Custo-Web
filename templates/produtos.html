@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Produtos</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/produtos.css') }}" />
+  <link rel="icon" href="{{ url_for('static', filename='logos/Kametal.ico') }}" type="image/x-icon" />
+</head>
+<body>
+  <div id="produtos-page">
+
+    <!-- CARD “Base Produto” -->
+    <div class="card card-add">
+      <div class="card-header">
+        <h2>Produtos</h2>
+        <a href="{{ url_for('dashboard.dashboard') }}" class="btn-back-dashboard">← Dashboard</a>
+      </div>
+      <div class="card-body">
+
+        <div class="search-container">
+          <input type="text" id="search_produto" placeholder="🔍 Pesquisar produtos cadastrados..." />
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages">
+              {% for category, msg in messages %}
+                <div class="flash {{ category }}">{{ msg }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <form id="form-novo-produto" action="{{ url_for('produtos.create_produto') }}" method="post">
+          <div class="form-row horizontal">
+            <div class="form-group">
+              <label for="nome_produto">Nome do Produto:</label>
+              <input type="text" id="nome_produto" name="nome_produto" placeholder="Digite o nome" required />
+            </div>
+            <div class="form-group">
+              <label for="pc_cobre">% Cobre:</label>
+              <input type="text" id="pc_cobre" name="pc_cobre" placeholder="Ex: 60,50" required />
+            </div>
+            <div class="form-group">
+              <label for="pc_zinco">% Zinco:</label>
+              <input type="text" id="pc_zinco" name="pc_zinco" placeholder="Ex: 39,50" required />
+            </div>
+          </div>
+          <div class="form-row form-row-submit">
+            <div class="botoes-esquerda">
+              <button type="submit" class="btn-primary">Adicionar Produto</button>
+            </div>
+            <div class="botoes-direita">
+              <a href="{{ url_for('produtos.export_produtos_excel') }}" class="btn-success" target="_blank">📥 Exportar Excel</a>
+              <a href="{{ url_for('produtos.export_produtos_pdf') }}" class="btn-danger" target="_blank">📥 Exportar PDF</a>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- CARD “Produtos Cadastrados” -->
+    <div class="card card-list">
+      <div class="card-header">
+        <h2>Produtos Cadastrados</h2>
+        <!-- Botão de exclusão em massa -->
+        <button
+          type="submit"
+          form="form-delete-selecionados"
+          class="btn-secondary btn-delete-selected"
+          style="display: none;"
+        >
+          🗑️ Excluir Selecionados
+        </button>
+      </div>
+      <div class="card-body">
+        <!-- Form de exclusão em massa, agora fora da table -->
+        <form id="form-delete-selecionados"
+              action="{{ url_for('produtos.delete_selecionados_produtos') }}"
+              method="post">
+        </form>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="select-all" /></th>
+                <th>Nome</th>
+                <th>% Cobre</th>
+                <th>% Zinco</th>
+                <th class="col-actions">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in produtos %}
+              <tr data-id="{{ p.id }}">
+                <td>
+                  <!-- checkbox agora referenciada ao form-delete-selecionados -->
+                  <input type="checkbox"
+                         name="produto_ids"
+                         value="{{ p.id }}"
+                         class="row-checkbox"
+                         form="form-delete-selecionados" />
+                </td>
+
+                <td>
+                  <input type="text"
+                        class="input-inline"
+                        data-field="nome"
+                        value="{{ p.nome }}"
+                        disabled />
+                </td>
+
+                <td>
+                  <input type="text"   
+                  class="input-inline" 
+                  data-field="pc_cobre" 
+                  value="{{ ('%.2f'|format(p.percentual_cobre)).replace('.',',') }}%" 
+                  disabled />
+                </td>
+
+                <td>
+                  <input type="text"   
+                  class="input-inline" 
+                  data-field="pc_zinco" 
+                  value="{{ ('%.2f'|format(p.percentual_zinco)).replace('.',',') }}%" 
+                  disabled />
+                </td>
+
+                <td class="col-actions">
+                  <span class="icon edit-icon" title="Editar">✏️</span>
+                  <span class="icon save-icon hidden" title="Salvar">💾</span>
+
+                  <!-- botão individual aponta para form “fantasma” externo -->
+                  <button
+                    type="submit"
+                    class="icon delete-icon btn-delete-confirm"
+                    data-nome="{{ p.nome }}"
+                    title="Excluir"
+                    form="delete-{{ p.id }}"
+                  >
+                    🗑️
+                  </button>
+                </td>
+              {% else %}
+              <tr>
+                <td colspan="5" class="no-data">Nenhum produto cadastrado.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Forms “fantasma” individuais _fora_ da table -->
+        {% for p in produtos %}
+        <form id="delete-{{ p.id }}"
+              action="{{ url_for('produtos.delete_produto', prod_id=p.id) }}"
+              method="post">
+        </form>
+        {% endfor %}
+
+      </div>
+    </div>
+
+  </div>
+  <script src="{{ url_for('static', filename='js/produtos.js') }}"></script>
+</body>
+</html>

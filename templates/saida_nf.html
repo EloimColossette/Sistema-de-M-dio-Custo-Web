@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Saída de NF</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/saida_nf.css') }}" />
+  <link rel="icon" href="{{ url_for('static', filename='logos/Kametal.ico') }}" type="image/x-icon" />
+</head>
+<body>
+  <div id="saida-nf-page">
+    <!-- CARD “Saída de NF” -->
+    <div class="card card-add">
+      <div class="card-header">
+        <h2>Saída de Nota Fiscal</h2>
+        <a href="{{ url_for('dashboard.dashboard') }}" class="btn-back-dashboard">← Dashboard</a>
+      </div>
+      <div class="card-body">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages">
+              {% for category, msg in messages %}
+                <div class="flash {{ category }}">{{ msg }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <!-- FORMULÁRIO PRINCIPAL -->
+        <form id="form-nova-nf" action="{{ url_for('saida_nf.salvar_nf') }}" method="post">
+          <div class="form-row horizontal">
+            <div class="form-group">
+              <label for="data_nf">Data:</label>
+              <input type="date" id="data_nf" name="data" required />
+            </div>
+            <div class="form-group w-nf">
+              <label for="numero_nf">Número NF:</label>
+              <input type="text" id="numero_nf" name="numero_nf" placeholder="Número" required />
+            </div>
+            <div class="form-group">
+              <label for="cnpj_nf">CNPJ/CPF:</label>
+              <input type="text" id="cnpj_nf" name="cnpj_cpf" placeholder="CNPJ ou CPF" required />
+            </div>
+            <div class="form-group w-cliente">
+              <label for="cliente_nf">Cliente:</label>
+              <input type="text" id="cliente_nf" name="cliente" placeholder="Nome do cliente" required />
+            </div>
+          </div>
+
+          <div class="form-group full-width">
+            <label for="obs_nf">Observação:</label>
+            <textarea id="obs_nf" name="observacao" rows="2"></textarea>
+          </div>
+
+          <hr />
+
+          <!-- BLOCO DE PRODUTOS -->
+          <fieldset class="produtos-fieldset">
+            <legend>Produtos</legend>
+            <div class="form-row horizontal align-end">
+              <div class="form-group w-produto">
+                <label for="prodNome">Produto:</label>
+                <input type="text" id="prodNome" placeholder="Nome do produto" />
+              </div>
+              <div class="form-group w-peso">
+                <label for="prodPeso">Peso:</label>
+                <input type="text" id="prodPeso" placeholder="0,000" />
+              </div>
+              <div class="form-group dropdown-container w-base">
+                <label for="prodBaseInput">Base Produto:</label>
+                <div class="dropdown-input" id="prodBaseInput" tabindex="0">
+                  <span class="placeholder">Selecione</span>
+                  <span class="arrow">▾</span>
+                </div>
+                <ul class="dropdown-list" id="prodBaseList">
+                  {% for id, nome in produtos %}
+                    <li data-value="{{ nome }}">{{ nome }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+              <div class="modal-add-btn-container">
+                <button type="button" id="addProdBtn" class="btn-primary btn-sm">Adicionar Produto</button>
+              </div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Peso</th>
+                  <th>Base Produto</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="produtosList">
+                <!-- preenchido via JS -->
+              </tbody>
+            </table>
+          </fieldset>
+
+          <!-- Botões -->
+          <div class="form-actions">
+            <button type="button" id="abrirModalNfBtn" class="btn btn-secondary">
+              Ver NF Cadastradas
+            </button>
+            <button type="submit" class="btn btn-primary">Salvar NF</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL DE NOTAS FISCAIS -->
+    <div id="modal-nfs" class="modal">
+      <div id="modal-loading" style="text-align:center; padding:20px; display:none;">
+        Carregando NFs...
+      </div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Notas Fiscais Cadastradas</h3>
+          <span id="fecharModalNfBtn" class="close">&times;</span>
+        </div>
+        <div class="search-and-filter">
+          <div class="search-container">
+            <input
+              type="text"
+              id="searchNfInput"
+              placeholder="🔍 Pesquisar NF, Cliente, Produto..."
+              autocomplete="off"
+              value="{{ search }}"
+            />
+            <!-- Botão de busca -->
+            <button
+              type="button"
+              id="searchNfBtn"
+              class="btn btn-secondary"
+              style="padding:6px 12px; margin-left:4px;"
+            >
+              🔍
+            </button>
+            <button id="deleteSelectedBtn" class="btn btn-danger" style="display:none; padding:6px 12px;">
+              🗑️ Excluir Selecionados
+            </button>
+          </div>
+            <button id="btnOpenFilter" class="btn btn-sm btn-secondary">Exportar</button>
+            <button id="btnImportModal" class="btn btn-sm btn-secondary">Importar</button>
+          </div>
+        <div class="modal-body">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th><input type="checkbox" id="selectAll"></th>
+                  <th>Data</th>
+                  <th>NF</th>
+                  <th>Produto</th>
+                  <th>Peso</th>
+                  <th>Cliente</th>
+                  <th>CNPJ/CPF</th>
+                  <th>Base Produto</th>
+                  <th class="col-actions">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for id, data, numero, cliente, cnpj, obs in nfs %}
+                  {% for p in produtos_map.get(id, []) %}
+                    <tr data-id="{{ id }}" data-obs="{{ obs }}">
+                      <td>
+                        <input type="checkbox" class="select-row">
+                      </td>
+
+                      <td>
+                        {{ data.strftime('%d/%m/%Y') }}
+                      </td>
+
+                      <td>
+                        {{ numero }}
+                      </td>
+
+                      <td title="{{ p.nome }}">
+                        <div class="multiline-ellipsis">{{ p.nome }}</div>
+                      </td>
+
+                      <td>{{ ('%.3f'|format(p.peso|float)).replace('.', ',') }} Kg</td>
+
+                      <td title="{{ cliente }}">
+                        <div class="multiline-ellipsis">{{ cliente }}</div>
+                      </td>
+
+                      <td title="{{ cnpj }}">
+                        <div class="multiline-ellipsis">{{ cnpj }}</div>
+                      </td>
+
+                      <td title="{{ p.base }}">
+                        <div class="multiline-ellipsis">{{ p.base }}</div>
+                      </td>
+                      
+                      <td class="col-actions">
+                        <!-- Botão “⋯” que abre o menu -->
+                        <div class="dropdown-container-actions">
+                          <span class="more-icon" title="Mais ações">⠇</span>
+                          <div class="action-menu">
+                            <span class="icon edit-icon" title="Editar">✏️</span>
+                            <span class="icon delete-icon" title="Excluir">🗑️</span>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr><td colspan="9" class="no-data">Nenhuma NF cadastrada.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          <div class="pagination" style="text-align:center; margin:8px 0;">
+            {% if page > 1 %}
+              <a href="?page=1#modal-nfs">« Primeiro</a>
+              <a href="?page={{ page-1 }}#modal-nfs">← Anterior</a>
+            {% endif %}
+
+            {% set start_page = page - 2 if page - 2 > 1 else 1 %}
+            {% set end_page = page + 2 if page + 2 < total_pages else total_pages %}
+
+            {# Se for necessário, mostra reticências antes #}
+            {% if start_page > 1 %}
+              <a href="?page=1#modal-nfs">1</a>
+              {% if start_page > 2 %}
+                <span>...</span>
+              {% endif %}
+            {% endif %}
+
+            {# Mostra números de páginas #}
+            {% for p in range(start_page, end_page+1) %}
+              {% if p == page %}
+                <span style="font-weight:bold; text-decoration:underline;">{{ p }}</span>
+              {% else %}
+                <a href="?page={{ p }}#modal-nfs">{{ p }}</a>
+              {% endif %}
+            {% endfor %}
+
+            {# Se for necessário, mostra reticências depois #}
+            {% if end_page < total_pages %}
+              {% if end_page < total_pages - 1 %}
+                <span>...</span>
+              {% endif %}
+              <a href="?page={{ total_pages }}#modal-nfs">{{ total_pages }}</a>
+            {% endif %}
+
+            {% if page < total_pages %}
+              <a href="?page={{ page+1 }}#modal-nfs">Próximo →</a>
+              <a href="?page={{ total_pages }}#modal-nfs">Último »</a>
+            {% endif %}
+          </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MODAL DE OBSERVAÇÃO -->
+  <div id="modal-obs" class="modal-obs">
+    <div class="modal-obs-content">
+      <span id="modalObsClose" class="modal-obs-close">&times;</span>
+      <h3>Observação</h3>
+      <!-- Texto ou textarea conforme o modo -->
+      <div id="view-mode">
+        <p id="modalObsText"></p>
+      </div>
+      <div id="edit-mode" style="display: none;">
+        <textarea id="modalObsInput" rows="4" style="width: 100%;"></textarea>
+      </div>
+      <!-- Botões -->
+      <div class="modal-obs-actions" style="margin-top: 1em; text-align: right;">
+        <button id="btnEditObs" class="btn btn-secondary btn-sm">Editar</button>
+        <button id="btnSaveObs" class="btn btn-primary btn-sm" style="display: none;">Salvar</button>
+        <button id="btnDeleteObs" class="btn btn-danger btn-sm">Excluir</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-nova-obs" class="modal">
+    <div class="modal-content">
+      <h3>Adicionar/Editar Observação</h3>
+      <textarea id="novaObsTextarea" rows="4" style="width:100%;"></textarea>
+      <div class="modal-actions">
+        <button id="cancelNovaObsBtn">Cancelar</button>
+        <button id="salvarNovaObsBtn">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE FILTROS -->
+  <div id="modal-filtros" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Exportar</h3>
+        <span id="fecharModalFiltros" class="close">&times;</span>
+      </div>
+      <form id="form-filtros" class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Data (de–até):</label>
+            <input type="date" name="data_de" /> até <input type="date" name="data_ate" />
+          </div>
+          <div class="form-group">
+            <label>NF:</label>
+            <input type="text" name="numero_nf" placeholder="Número NF" />
+          </div>
+          <div class="form-group">
+            <label>Produto:</label>
+            <input type="text" name="produto_nome" placeholder="Produto" />
+          </div>
+          <div class="form-group">
+            <label>Cliente:</label>
+            <input type="text" name="cliente" placeholder="Cliente" />
+          </div>
+          <div class="form-group">
+            <label>CNPJ/CPF:</label>
+            <input type="text" name="cnpj_cpf" placeholder="CNPJ ou CPF" />
+          </div>
+          <div class="form-group">
+            <label>Base Produto:</label>
+            <input type="text" name="base_produto" placeholder="Base" />
+          </div>
+        </div>
+        <div class="modal-footer" style="text-align:right; margin-top:1em;">
+          <button type="button" id="btnExportExcel" class="btn btn-primary btn-sm">Exportar Excel</button>
+          <button type="button" id="btnExportPdf"   class="btn btn-primary btn-sm">Exportar PDF</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL DE IMPORTAÇÃO EXCEL -->
+  <div id="modal-import" class="modal-import">
+    <div class="modal-import-content">
+      <span id="importClose" class="modal-import-close">&times;</span>
+      <h3>Importar Excel</h3>
+      <form id="form-import-excel"
+            action="{{ url_for('saida_nf.importar_excel') }}"
+            method="POST"
+            enctype="multipart/form-data"
+            class="form-import-excel">
+        <input type="file" name="arquivo_excel" accept=".xlsx" required />
+        <div class="import-buttons">
+          <button type="button" id="cancelImport" class="btn btn-secondary btn-sm">Cancelar</button>
+          <button type="submit" class="btn btn-primary btn-sm">Importar</button>
+        </div>
+      </form>
+      <div id="progressContainer" style="display:none; margin-top:10px;">
+        <div style="background:#eee; width:100%; height:8px; border-radius:4px; overflow:hidden;">
+          <div id="progressBar" style="width:0%; height:100%; background:#007bff; transition:width 0.2s;"></div>
+        </div>
+        <small id="progressText" style="display:block; text-align:center; margin-top:5px;">0%</small>
+      </div>
+      <div id="importMessage" style="margin-top:10px; text-align:center; display:none;">
+        <span id="importMsgText" style="font-size:0.9em;"></span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const modalAberto = "{{ 'true' if modal_aberto else 'false' }}";
+      if (modalAberto === "True" || modalAberto === "true") {
+        const modal = document.getElementById('modal-nfs');
+        if (modal) {
+          modal.style.display = 'block';
+          modal.classList.add('show');
+        }
+      }
+    });
+  </script>
+
+  <script src="{{ url_for('static', filename='js/saida_nf.js') }}"></script>
+</body>
+</html>

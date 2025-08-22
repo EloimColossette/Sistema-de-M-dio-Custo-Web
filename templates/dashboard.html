@@ -1,0 +1,228 @@
+<!-- templates/dashboard.html -->
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <link rel="icon" href="{{ url_for('static', filename='logos/Kametal.ico') }}" type="image/x-icon" />
+</head>
+<body>
+  <aside class="sidebar collapsed" id="sidebar">
+    <nav class="menu">
+      <a href="{{ url_for('usuarios.usuarios') }}" class="menu-item {% if request.endpoint=='usuarios' %}active{% endif %}">
+        <span class="icon">👥</span><span class="label">Usuários</span>
+      </a>
+
+      <div class="menu-item has-submenu" id="reportsItem">
+        <span class="icon">🛠️</span>
+        <span class="label">Base de Material/Produto</span>
+      </div>
+      <ul class="submenu hidden" id="reportsSubmenu">
+        <li>
+          <a href="{{ url_for('materiais.materiais') }}" class="{% if request.endpoint=='materiais' %}active{% endif %}">
+            <span class="sub-icon">🧱</span>
+            <span class="sub-label">Base Material</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('produtos.produtos') }}" class="{% if request.endpoint == 'produtos' %}active{% endif %}">
+            <span class="sub-icon">📦</span>
+            <span class="sub-label">Base Produto</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="menu-item has-submenu" id="nfItem">
+        <span class="icon">📄</span>
+        <span class="label">Nota Fiscal</span>
+      </div>
+      <ul class="submenu hidden" id="nfSubmenu">
+        <li>
+          <a href="{{ url_for('entrada_nf.nova_entrada') }}" class="">
+            <span class="sub-icon">⬇️📄</span>
+            <span class="sub-label">Entrada Nota Fiscal</span>
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('saida_nf.saida_nf') }}" class="sub-item">
+            <span class="sub-icon">⬆️📄</span>
+            <span class="sub-label">Saída Nota Fiscal</span>
+          </a>
+        </li>
+      </ul>
+
+      <a href="#" class="menu-item"><span class="icon">🧮</span><span class="label">Cálculos e Médias</span></a>
+      <a href="#" class="menu-item"><span class="icon">📋</span><span class="label">Relatórios</span></a>
+      <a href="#" class="menu-item"><span class="icon">📈</span><span class="label">Graficos de Cotação</span></a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <header class="header">
+      <div class="header-left">
+        <button id="toggleSidebar" class="toggle-btn">☰</button>
+      </div>
+      <div class="header-center">
+        <div class="logo-title">
+          <img src="{{ url_for('static', filename='logos/Kametal.png') }}" alt="Logo" />
+          <h1>SistemaX</h1>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="user-menu" id="userMenu">
+          <span class="user-name">👤 {{ nome_usuario }}</span>
+          <ul class="dropdown" id="userDropdown">
+            <li><a href="#">Perfil</a></li>
+            <li><a href="{{ url_for('auth.logout') }}">Sair</a></li>
+          </ul>
+        </div>
+      </div>
+    </header>
+
+    <section class="content">
+      <div class="tabs-nav">
+        <button class="tab-btn active" data-tab="aba1">Materiais/Produtos</button>
+        <button class="tab-btn" data-tab="aba2">Relatorio Saida NF</button>
+        <button class="tab-btn" data-tab="aba3">Acessos</button>
+        <button class="tab-btn" data-tab="aba4">Alertas</button>
+        <button class="tab-btn" data-tab="aba6">Configurações</button>
+        <span class="tab-indicator"></span>
+      </div>
+
+      <div class="tabs-content">
+        <div class="tab-content active" id="aba1">
+          <h2>Relatório de Materiais</h2>
+          <div class="report-frame" id="mat-frame">
+            {% if materiais %}
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Fornecedor</th>
+                  <th>Valor</th>
+                  <th>Grupo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for _, nome, fornecedor, valor, grupo in materiais %}
+                <tr>
+                  <td>{{ nome }}</td>
+                  <td>{{ fornecedor }}</td>
+                  <td class="right">
+                    {{ "{:,.4f}".format(valor).replace(',', '_').replace('.', ',').replace('_', '.') }}
+                  </td>
+                  <td>{{ grupo }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <p class="no-items-msg">Nenhum material cadastrado.</p>
+            {% endif %}
+          </div>
+
+          <h2>Relatório de Produtos</h2>
+          <div class="report-frame" id="prod-frame">
+            {% if produtos %}
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>% Cobre</th>
+                  <th>% Zinco</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for nome, pc, pz in produtos %}
+                <tr>
+                  <td>{{ nome }}</td>
+                  <td class="center">
+                    {{ "{:,.2f}".format(pc).replace(",", "_").replace(".", ",").replace("_", ".") }}%
+                  </td>
+                  <td class="center">
+                    {{ "{:,.2f}".format(pz).replace(",", "_").replace(".", ",").replace("_", ".") }}%
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <p class="no-items-msg">Nenhum produto cadastrado.</p>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="tab-content" id="aba2">
+  
+        <!-- Título fora do card -->
+        <h2>Últimas Saídas de NF</h2>
+        
+        <div class="card report-card mb-4">
+          <div class="card-body p-0">
+            <div class="table-responsive report-table">
+              <table class="table mb-0">
+                <colgroup>
+                  <col style="width: 90px">
+                  <col style="width: 60px">
+                  <col style="width: 200px">
+                  <col style="width: 80px">
+                  <col style="width: 180px">
+                  <col style="width: 120px">
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>NF</th>
+                    <th>Produto</th>
+                    <th class="text-right">Peso</th>
+                    <th>Cliente</th>
+                    <th>Base Produto</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in ultimas_saidas %}
+                  <tr>
+                    <td>{{ item.data }}</td>
+                    <td>{{ item.nf }}</td>
+                    <td>{{ item.produto }}</td>
+                    <td class="text-right">{{ item.peso }}</td>
+                    <td>{{ item.cliente }}</td>
+                    <td>{{ item.base }}</td>
+                  </tr>
+                  {% else %}
+                  <tr>
+                    <td colspan="6" class="text-center py-3">
+                      Nenhuma saída de NF encontrada.
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-content" id="aba3">
+          <h2>Acessos</h2>
+          <div class="chart-container" id="chart-acessos"></div>
+        </div>
+
+        <div class="tab-content" id="aba4">
+          <h2>Alertas</h2>
+          <ul class="alert-list"></ul>
+        </div>
+
+        <div class="tab-content" id="aba6">
+          <h2>Configurações</h2>
+          <form class="settings-form"></form>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,297 @@
+/* usuarios.css */
+:root {
+  --primary: #667eea;
+  --secondary: #4a5568;
+  --bg: #f7fafc;
+  --card: #fff;
+  --text: #2d3748;
+  --radius: 8px;
+  --gap: 16px;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+.container { padding: var(--gap); max-width: 1200px; margin: auto; }
+
+/* ===== Full-bleed e aumento de altura do header ===== */
+header.page-header {
+  position: relative;
+  left: 50%;
+  margin-left: -50vw;
+  width: 100vw;
+  margin-top: calc(-1 * var(--gap));
+  background: linear-gradient(180deg, #000000 0%, #4a4a4a 50%, #667eea 100%) !important;
+  padding: 1rem 1rem !important;
+  min-height: 50px !important;
+  box-sizing: border-box;
+}
+
+/* mantém o ícone/link no tamanho original e no canto esquerdo */
+.page-header .btn-icon {
+  font-size: 1.2rem;  /* ou o tamanho que você já tinha */
+  flex: 0;            /* não deixa crescer */
+  position: absolute; /* mantém à esquerda */
+  left: 1rem;         /* ajuste de espaçamento */
+  color: #007bff;
+}
+
+/* só o título cresce, centralizado */
+.page-header .page-title {
+  font-size: 2.5rem;  /* ajuste pra ficar do tamanho que quiser */
+  color: #fff;
+  margin: 0 auto;     /* centraliza */
+  flex: none;         /* não cresce em flexbox */
+}
+
+/* título branco sobre o fundo colorido do header */
+header.page-header .page-title {
+  color: #fff !important;
+}
+
+h1 { margin: 0; font-size: 1.75rem; }
+
+.btn { 
+  padding: 0.5rem 1rem; 
+  border: none; 
+  border-radius: var(--radius); 
+  cursor: pointer;
+}
+
+.btn-primary { 
+  background: var(--primary); 
+  color: #fff; 
+  transition: background 0.2s;
+}
+
+.btn-primary:hover { background: #6d5ad8; }
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  padding: 0.25rem 0.5rem;
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.btn-icon:hover {
+  text-decoration: underline;
+}
+
+.btn-danger {
+  background-color: #dc3545; /* Vermelho Bootstrap */
+  color: #fff;
+  border: 1px solid #dc3545;
+  padding: 0.4rem 0.75rem;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.btn-danger:hover {
+  background-color: #c82333; /* Tom mais escuro no hover */
+  border-color: #bd2130;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: var(--gap);
+  flex-wrap: wrap;
+}
+
+.actions input,
+.actions select,
+.actions button {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid #cbd5e0;
+}
+
+.actions button {
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.actions button:hover {
+  background: #5a67d8;
+}
+
+.actions .btn-danger {
+  background-color: #dc3545 !important;
+  color: #fff !important;
+  border: 1px solid #dc3545;
+}
+
+.actions .btn-danger:hover {
+  background-color: #c82333 !important;
+  border-color: #bd2130;
+}
+
+.table { 
+  width: 100%; 
+  border-collapse: collapse; 
+  background: var(--card); 
+  border-radius: var(--radius); 
+  overflow: hidden;
+}
+
+.table th, .table td { 
+  padding: 0.75rem; 
+  text-align: left; 
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.table th:first-child, .table td:first-child { 
+  width: 40px; 
+  text-align: center;
+}
+
+.table tbody tr:hover { background: #f1f5f9; }
+
+.badge { 
+  padding: 0.25rem 0.5rem; 
+  border-radius: var(--radius); 
+  font-size: 0.75rem;
+}
+.badge-success { background: #d1e7dd; color: #0f5132; }
+
+.badge-secondary { background: #e2e8f0; color: #4a5568; }
+
+.pagination { 
+  display: flex; 
+  gap: 0.5rem; 
+  margin-top: var(--gap);
+}
+
+.pagination .page-btn { 
+  padding: 0.5rem; 
+  border: 1px solid #cbd5e0; 
+  border-radius: var(--radius); 
+  background: var(--card); 
+  cursor: pointer;
+}
+
+.pagination .active { 
+  background: var(--primary); 
+  color: #fff; 
+  border-color: var(--primary);
+}
+
+/* Modal */
+.modal { 
+  display: none; 
+  position: fixed; 
+  top: 0; 
+  left: 0; 
+  width: 100%; 
+  height: 100%; 
+  background: rgba(0,0,0,0.5); 
+  justify-content: center; 
+  align-items: center;
+}
+
+.modal-content { 
+  background: var(--card); 
+  padding: var(--gap); 
+  border-radius: var(--radius); 
+  width: 90%; 
+  max-width: 400px; 
+  position: relative;
+}
+
+.close-modal { 
+  position: absolute; 
+  top: 8px; 
+  right: 12px; 
+  cursor: pointer; 
+  font-size: 1.25rem;
+}
+
+.modal-content form { 
+  display: flex; 
+  flex-direction: column; 
+  gap: var(--gap);
+}
+
+.modal-content input { 
+  padding: 0.5rem; 
+  border: 1px solid #cbd5e0; 
+  border-radius: var(--radius);
+}
+
+.inline-form {
+  display: inline;
+  margin: 0;
+  padding: 0;
+}
+
+.actions-cell > button,
+.actions-cell .inline-form button {
+  margin-left: 0.25rem;
+}
+
+.page-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--gap);
+  padding: 0 2rem;
+}
+
+.btn-secondary {
+  background: var(--secondary);
+  color: #fff;
+  transition: background 0.2s;
+}
+.btn-secondary:hover {
+  background: #2d3748;
+}
+
+/* Badge de inativo: fundo vermelho claro, texto vermelho escuro */
+.badge-danger {
+  background: #f8d7da;
+  color: #842029;
+}
+
+/* ========== Flash messages (copiado de fornecedores.css) ========== */
+.flash-messages {
+  margin-bottom: 16px;
+}
+.flash {
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+.flash.sucesso {
+  background-color: #e6ffed;
+  border-left: 4px solid #28a745;
+  color: #155724;
+}
+.flash.erro {
+  background-color: #ffe6e6;
+  border-left: 4px solid #dc3545;
+  color: #721c24;
+}
+.flash.info {
+  background-color: #e6f0ff;
+  border-left: 4px solid #007bff;
+  color: #004085;
+}

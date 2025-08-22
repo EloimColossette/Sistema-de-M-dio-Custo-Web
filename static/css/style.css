@@ -1,0 +1,266 @@
+/* Reset simples */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Body e fonte principal */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  background: linear-gradient(135deg, #000000 0%, #7f8c8d 60%, #3498db 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  pointer-events: none;
+}
+
+/* Wrapper para responsividade */
+.login-wrapper {
+  width: 100%;
+  max-width: 420px;
+  padding: 20px;
+  pointer-events: none;
+}
+
+.login-wrapper, .login-card {
+  position: relative;
+  z-index: 10; /* Para ficar na frente das partículas */
+  pointer-events: auto; /* Para receber eventos */
+}
+
+/* 2) Reactiva eventos apenas no wrapper e tudo dentro dele */
+.login-wrapper,
+.login-wrapper * {
+  pointer-events: auto;
+}
+
+
+/* Card com efeito glassmorphism */
+.login-card {
+  background: #f2f2f2;
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.15);
+  padding: 28px 24px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 2) Reativamos só no card e nos elementos dentro dele */
+.login-card,
+.login-card * {
+  pointer-events: auto;
+}
+
+/* Logo com animação suave */
+.logo {
+  margin-bottom: 12px;
+  transition: transform 0.4s ease;
+}
+.logo img {
+  width: 80px;
+}
+.logo:hover {
+  transform: rotate(5deg) scale(1.1);
+}
+
+/* Título */
+.login-card h2 {
+  font-weight: 700;
+  color: #333;
+  font-size: 1.2rem;
+  margin-bottom: 12px;
+}
+
+/* Grupos de input */
+.input-group {
+  text-align: left;
+  margin-bottom: 10px;
+  position: relative;
+}
+.input-group label {
+  display: block;
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 4px;
+}
+.input-group input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: text;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.input-group input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 8px rgba(102, 126, 234, 0.4);
+  outline: none;
+}
+
+/* Para os grupos lado a lado */
+.input-row {
+  display: flex;
+  gap: 1rem;
+}
+.input-row .half {
+  flex: 1;
+}
+
+/* Feedback de validação */
+.input-feedback {
+  font-size: 12px;
+  color: #e53e3e;
+  margin-top: 4px;
+  min-height: 16px;
+}
+
+/* Estilo para campo inválido */
+input.invalid {
+  border-color: #e53e3e;
+  box-shadow: 0 0 4px rgba(229, 62, 62, 0.4);
+}
+
+/* Wrapper e toggle de visibilidade da senha */
+.password-wrapper {
+  position: relative;
+}
+.eye-toggle {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: #888;
+  transition: color 0.3s;
+}
+.eye-toggle:hover {
+  color: #333;
+}
+.eye-toggle svg {
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+/* Botão principal */
+button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 6px;
+  border: none;
+  border-radius: 8px;
+  background: #667eea;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s, transform 0.2s;
+}
+button:hover:not([disabled]) {
+  background: #5a67d8;
+  transform: translateY(-2px);
+}
+button:focus {
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.4);
+  outline: none;
+}
+button[disabled] {
+  background: #a0aec0;
+  cursor: not-allowed;
+}
+
+/* Link Esqueci senha */
+.forgot-password {
+  margin-top: 10px;
+  font-size: 13px;
+}
+.forgot-password a {
+  color: #555;
+  text-decoration: none;
+  transition: color 0.3s;
+}
+.forgot-password a:hover {
+  color: #3498db;
+  text-decoration: underline;
+}
+
+/* Caixa de mensagem */
+.mensagem {
+  background: #fed7d7;
+  color: #c53030;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  transition: opacity 0.4s ease;
+  animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mensagem.erro {
+  background-color: #f8d7da;
+  color: #842029;
+}
+
+.mensagem.sucesso {
+  background-color: #d1e7dd;
+  color: #0f5132;
+}
+
+/* Link de cadastro */
+.link {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #555;
+}
+.link a {
+  color: #667eea;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.3s;
+}
+.link a:hover {
+  color: #5a67d8;
+}
+
+/* Responsividade extra para telas menores */
+@media (max-width: 420px) {
+  .login-card {
+    padding: 16px 20px;
+  }
+  .logo img {
+    width: 60px;
+  }
+}
+
+#particles-js {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: -1;
+  pointer-events: auto;    /* já ativo pra poder captar hover/click */
+  background: linear-gradient(135deg, #000000 0%, #7f8c8d 60%, #3498db 100%);
+  background-size: 300% 300%;
+  animation: moveGradient 15s ease infinite;
+}
+
+@keyframes moveGradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}

@@ -1,0 +1,743 @@
+/* static/css/saida_nf.css */
+
+/* Reset e tipografia */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', sans-serif;
+}
+html, body {
+  height: 100%;
+  background-color: #f0f2f5;
+  color: #333;
+}
+#saida-nf-page {
+  display: flex;
+  flex-direction: column;
+}
+
+/* CARD “Saída de NF” */
+.card-add {
+  background-color: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.card-add .card-header {
+  background: linear-gradient(180deg, #000 0%, #4a4a4a 50%, #667eea 100%);
+  padding: 16px;
+  position: relative;
+}
+.card-add .card-header h2 {
+  color: #fff;
+  font-size: 1.75rem;
+  text-align: center;
+}
+.btn-back-dashboard {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #007bff;
+  text-decoration: none;
+  font-size: 1.2rem;    /* ajusta pra o tamanho que você quiser */
+  padding: 4px 8px;      /* opcional, aumenta o “clique” */
+}
+.btn-back-dashboard:hover {
+  text-decoration: underline;
+}
+.card-add .card-body {
+  padding: 16px;
+}
+
+/* Form rows */
+.form-row.horizontal {
+  display: flex;
+  gap: 12px;
+}
+.form-row.align-end {
+  align-items: flex-end;
+}
+.form-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.form-group.full-width {
+  flex: 1 1 100%;
+  margin-top: 16px;
+}
+.form-group label {
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 4px;
+  font-size: 0.9rem;
+}
+.form-group input,
+.form-group textarea {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+/* Ações do formulário */
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+.btn-primary {
+  background-color: #007bff;
+  color: #fff;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.btn-primary:hover {
+  background-color: #0056b3;
+}
+.btn-secondary {
+  background-color: #218838;
+  color: #fff;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.btn-secondary:hover {
+  background-color: #218838;
+}
+
+.btn-danger {
+  background-color: #dc3545;      /* Vermelho Bootstrap padrão */
+  color: #fff;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+.btn-danger:hover {
+  background-color: #c82333;      /* Vermelho mais escuro no hover */
+}
+/* FIELDSET DE PRODUTOS */
+.produtos-fieldset {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 16px;
+  margin-top: 16px;
+}
+.produtos-fieldset legend {
+  padding: 0 8px;
+  font-weight: 600;
+  color: #555;
+}
+.produtos-fieldset table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+.produtos-fieldset th,
+.produtos-fieldset td {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  text-align: left;
+  font-size: 0.85rem;
+}
+.produtos-fieldset th {
+  background-color: #f1f1f1;
+}
+
+/* MODAL DE NOTAS FISCAIS */
+/* 1) Forçar tabela fixa e largura total */
+#modal-nfs table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+/* 2) Estilo geral de células (agora todas middle) */
+#modal-nfs th,
+#modal-nfs td {
+  padding: 12px 8px;       /* mesmo padding horizontal para todas */
+  text-align: left;
+  vertical-align: middle;  /* centraliza todo o conteúdo */
+  font-size: 0.9rem;
+  color: #333;
+  line-height: 1rem;
+}
+
+/* 3) Cabeçalho */
+#modal-nfs thead th {
+  /* Sobrescreve o padding anterior */
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+
+  /* Força uma altura fixa igual para todas */
+  height: 36px !important;
+
+  /* Centraliza o texto verticalmente */
+  line-height: 32px !important;
+
+  /* Evita que quebre em duas linhas */
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+
+  /* Seu estilo de cor/fundo */
+  background: #2b6cb0;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+/* 4) Zebra e hover */
+#modal-nfs tbody tr:nth-child(even) { background: #f7fafc; }
+#modal-nfs tbody tr:hover       { background: #e9eef3; }
+
+/* 5) Largura fixa por coluna (px) */
+#modal-nfs th:nth-child(1),  /* Checkbox */
+#modal-nfs td:nth-child(1) {
+  width: 5px;     
+  text-align: center;
+}
+#modal-nfs th:nth-child(2),  /* Data */
+#modal-nfs td:nth-child(2) {
+  width: 100px;     
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+#modal-nfs th:nth-child(3),  /* NF */
+#modal-nfs td:nth-child(3) {
+  width: 55px;     
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+#modal-nfs th:nth-child(4),  /* Produto */
+#modal-nfs td:nth-child(4) {
+  width: 250px;    
+  white-space: normal;
+  word-wrap: break-word;
+  text-align: center;
+}
+#modal-nfs th:nth-child(5),  /* Peso */
+#modal-nfs td:nth-child(5) {
+  width: 110px;     
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+#modal-nfs th:nth-child(6),  /* Cliente */
+#modal-nfs td:nth-child(6) {
+  width: 190px;    
+  white-space: normal;
+  word-wrap: break-word;
+  text-align: center;
+}
+#modal-nfs th:nth-child(7),  /* CNPJ/CPF */
+#modal-nfs td:nth-child(7) {
+  width: 160px;    
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+#modal-nfs th:nth-child(8),  /* Base Produto */
+#modal-nfs td:nth-child(8) {
+  width: 120px;    
+  white-space: normal;
+  word-wrap: break-word;
+  text-align: center;
+}
+#modal-nfs th:nth-child(9),  /* Ações */
+#modal-nfs td:nth-child(9) {
+  width: 75px;     
+  text-align: center;
+}
+
+/* 6) Ícones de ação */
+.col-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.col-actions .icon:hover {
+  color: #2b6cb0;
+  cursor: pointer;
+}
+
+.dropdown-container-actions {
+  position: relative;
+  margin-left: 4px;
+  cursor: pointer;
+}
+
+/* Ajusta o menu “⋯” e sino para herdar a altura */
+.dropdown-container-actions,
+.obs-icon {
+  display: inline-block;
+  vertical-align: middle;    /* alinha cada ícone ao meio da linha */
+  margin: 0 4px;             /* espaçamento entre eles */
+  line-height: 1;            /* evita esticar a célula */
+}
+
+/* Garante que o menu abra corretamente */
+.dropdown-container-actions .action-menu {
+  top: calc(100% + 4px);
+}
+
+.more-icon {
+  font-size: 1rem;
+  line-height: 1;
+  display: inline-block;
+  text-align: center;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.action-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  padding: 4px 0;
+  white-space: nowrap;
+  z-index: 3000;
+}
+
+.action-menu .icon {
+  display: block;
+  padding: 6px 12px;
+}
+
+.action-menu .icon:hover {
+  background: #f1f3f5;
+}
+
+.dropdown-container-actions.show .action-menu {
+  display: block;
+  padding: 2px 4px;
+}
+
+#modal-nfs td.col-actions {
+  display: table-cell;       /* volta a ser célula de tabela */
+  vertical-align: middle;    /* centraliza verticalmente */
+  text-align: center;        /* centraliza horizontalmente */
+  padding: 12px 10px;        /* mesmo padding que as outras células */
+}
+
+/* MODAL GERAL */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;       /* ocupar 100% da viewport width */
+  height: 100vh;      /* ocupar 100% da viewport height */
+  display: none;
+  background-color: rgba(0,0,0,0.5);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+}
+.modal.show {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-content {
+  position: absolute;
+  top: 0;                  /* alinha logo abaixo do cabeçalho */
+  left: 0;
+  background: #fff;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+.modal-actions {
+  text-align: right;
+  margin-top: 10px;
+}
+.modal-actions button {
+  margin-left: 10px;
+}
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+}
+.modal-header {
+  background: linear-gradient(180deg, #000 0%, #4a4a4a 50%, #667eea 100%);
+  color: #fff;
+  position: relative;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+}
+.modal-header h3 {
+  font-size: 1.5rem;
+  text-align: center;
+  margin: 8px 10px;              /* Espaço acima e abaixo */
+  line-height: 1;
+}
+.modal-header .close {
+  position: absolute;
+  right: 0;
+  top: 0;
+  font-size: 1.5rem;
+  color: #fff;
+  cursor: pointer;
+  padding: 8px 16px;
+}
+
+/* Quando o modal de filtros estiver aberto (tiver .show) */
+#modal-filtros.modal.show {
+  display: flex;             /* flex do overlay */
+  align-items: center;       /* centraliza vertical */
+  justify-content: center;   /* centraliza horizontal */
+  background: rgba(0,0,0,0.3);
+}
+
+/* Conteúdo apenas quando aberto */
+#modal-filtros.modal.show .modal-content {
+  position: relative; /* sai do absolute full-screen */
+  width: 80%;
+  max-width: 600px;
+  max-height: 80vh;
+  margin: auto;
+  padding: 1em 1.5em;
+  border-radius: 0.5em;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  overflow-y: auto;
+}
+
+/* Opcional: diminuir ainda mais o overlay escuro */
+#modal-filtros.modal {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* DROPDOWNS */
+.dropdown-container,
+.dropdown-container-inline {
+  position: relative;
+}
+.dropdown-input,
+.dropdown-input-inline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+.dropdown-input:focus,
+.dropdown-input-inline:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+}
+.dropdown-input .arrow,
+.dropdown-input-inline .arrow {
+  margin-left: 8px;
+}
+.dropdown-list,
+.dropdown-list-inline {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  display: none;
+  z-index: 2000;
+}
+.dropdown-list.show,
+.dropdown-list-inline.show {
+  display: block;
+}
+.dropdown-list li,
+.dropdown-list-inline li {
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.dropdown-list li:hover,
+.dropdown-list-inline li:hover {
+  background-color: #f1f3f5;
+}
+
+.multiline-ellipsis {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;     /* WebKit/Blink */
+  -webkit-box-orient: vertical;
+  /* Padrão CSS (se suportado) */
+  display: box;              /* fallback legacy, opcional */
+  line-clamp: 2;             /* padrão */
+  box-orient: vertical;      /* padrão */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  max-height: 2 em;
+  /* line-height: 1 em; */
+  word-break: break-word;
+}
+
+/* MODAL DE OBSERVAÇÃO */
+#modal-obs {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 9999;
+}
+.modal-obs-content {
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  max-width: 400px;
+  width: 90%;
+  position: relative;
+}
+/* Mostrar quando tiver a classe show */
+.modal-obs.show {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+.modal-obs-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+.obs-icon {
+  cursor: pointer;
+  margin-right: 6px;
+  font-size: 18px;
+}
+
+/* barra de pesquisa logo abaixo do título */
+#modal-nfs .search-container {
+  padding: 1px 1px;        /* ajuste interno horizontal */
+  text-align: left;         /* alinha input à esquerda */
+  background: #fff;         /* mesma cor do fundo da modal-content */
+}
+
+/* estilo do input */
+#modal-nfs .search-container input {
+  width: 250px;             /* tamanho compacto */
+  padding: 7px 7px;
+  font-size: 0.85rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+/* agrupa pesquisa + botões */
+.search-and-filter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  gap: 8px;
+}
+
+/* mantém pesquisa e “excluir” juntos */
+.search-and-filter .search-container {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-right: auto;
+}
+
+/* largura do input de pesquisa */
+.search-and-filter .search-container input {
+  width: 240px;
+}
+
+/* botão filtros alinhado à direita */
+.search-and-filter > button.btn-secondary {
+  margin-left: 0;
+}
+
+/* Modal de Importação */
+.modal-import {
+  /* já existente */
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5);
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+}
+
+.modal-import.show {
+  display: flex !important;
+}
+
+.modal-import-content {
+  background: #fff;
+  padding: 1.5rem;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 400px;
+  position: relative;
+}
+
+.modal-import-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 1rem;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+/* Reaproveita sua classe existente para alinhar o input + botão */
+.form-import-excel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 1rem;
+}
+
+.import-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+#progressContainer {
+  margin-top: 10px;
+}
+#progressBar {
+  height: 8px;
+  background: #007bff;
+  border-radius: 4px;
+  transition: width 0.2s;
+}
+
+/* elimina o gap logo abaixo do header e puxa a search-and-filter pra cima */
+#modal-nfs .modal-content {
+  gap: 0;              /* sem espaçamento extra entre header e .search-and-filter */
+  padding-top: 0;      /* tira o padding-top que empurra o conteúdo pra baixo */
+}
+
+/* dá um pequeno espaçamento entre header e search-and-filter */
+#modal-nfs .search-and-filter {
+  margin-top: 8px;     /* ajuste fino: sobe ou desce conforme você queira */
+}
+
+/* garante que o botão fechar continue posicionado corretamente */
+#modal-nfs .modal-header {
+  padding-bottom: 8px; /* ajuste conforme precisar */
+  margin-bottom: 0;    /* remove qualquer margem extra */
+}
+
+/* Responsivo */
+@media (max-width: 600px) {
+  .form-row.horizontal,
+  .produtos-fieldset .form-row.horizontal {
+    flex-direction: column;
+  }
+  .modal-content {
+    padding: 16px;
+  }
+}
+
+.pagination a, .pagination span {
+  margin: 0 3px;
+  padding: 4px 8px;
+  text-decoration: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  color: #007bff;
+  font-size: 14px;
+}
+
+.pagination a:hover {
+  background-color: #007bff;
+  color: white;
+}
+
+.pagination span {
+  font-weight: bold;
+  color: black;
+  border: none;
+}
+
+
+/* Campos fixos */
+.w-nf { flex: 0 0 100px; }
+.w-cliente { flex: 3; }
+
+/* Larguras específicas para os campos de Produto (na aba de adicionar produto) */
+.w-produto { flex: 3; min-width: 150px; }
+.w-peso { flex: 0 0 100px; min-width: 80px; }
+.w-base { flex: 1.5; min-width: 120px; }
+
+/* Flash Messages */
+.flash-messages {
+  margin-bottom: 16px;
+}
+.flash {
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+.flash.sucesso {
+  background-color: #e6ffed;
+  border-left: 4px solid #28a745;
+  color: #155724;
+}
+.flash.erro {
+  background-color: #ffe6e6;
+  border-left: 4px solid #dc3545;
+  color: #721c24;
+}
+.flash.info {
+  background-color: #e6f0ff;
+  border-left: 4px solid #007bff;
+  color: #004085;
+}

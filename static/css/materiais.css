@@ -1,0 +1,459 @@
+/* ===========================================
+   ESTILO EXCLUSIVO PARA MATERIAIS (VERSÃO “MODERNA”)
+   =========================================== */
+
+/* Tipografia + Reset simples */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', sans-serif;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background-color: #f0f2f5;
+  color: #333;
+}
+
+/* Container principal */
+#materiais-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* CARD “Adicionar Novo Material” */
+.card-add {
+  background-color: #fff;
+  border-radius: 2px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  overflow: hidden;
+}
+
+.card-add .card-header {
+  background: linear-gradient(180deg, #000000 0%, #4a4a4a 50%, #667eea 100%);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center; /* centraliza o título */
+  position: relative;
+}
+
+.card-add .card-header h2 {
+  color: #fff;
+  font-size: 2rem;
+  text-align: center;
+  margin: 0;
+}
+
+/* Botão “← Dashboard” */
+.btn-back-dashboard {
+  position: absolute;
+  left: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #007bff;
+  font-size: 20px;
+  text-decoration: none;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.btn-back-dashboard:hover {
+  text-decoration: underline;
+}
+
+/* Interno do card-add */
+.card-add .card-body {
+  padding: 12px 16px;
+}
+
+/* Ajuste final para o container do formulário */
+.card-add .card-body form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-gap: 8px 12px;
+}
+
+/* FORMULÁRIO: LINHAS HORIZONTAIS */
+.form-row.horizontal {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.form-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 4px;
+  font-size: 0. nine rem;
+}
+
+.form-group input[type="text"],
+.form-group select {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0. nine rem;
+  line-height: 1.2;
+  transition: border-color 0.2s;
+}
+
+.form-group input[type="text"]:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+/* RADIO-GROUP dentro da segunda linha */
+.radio-group {
+  display: flex;
+  gap: 12px;
+}
+
+.radio-group label {
+  font-size: 0.95rem;
+  color: #555;
+}
+
+/* Botões na terceira linha */
+.form-row.form-row-submit {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* E por fim, botões menores: */
+.btn-primary, .btn-secondary {
+  padding: 6px 12px;      /* reduz o tamanho vertical dos botões */
+  font-size: 0. nine rem;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: #fff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+}
+
+.btn-secondary {
+  display: inline-block;
+  background-color: #6c757d;
+  color: #fff;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  transition: background-color 0.2s;
+}
+.btn-secondary:hover {
+  background-color: #5a6268;
+}
+
+.btn-delete-selected {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: #dc3545;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.btn-delete-selected:hover {
+  background-color: #c82333;
+}
+
+/* Grupos de botões (esquerda e direita) */
+.botoes-esquerda,
+.botoes-direita {
+  display: flex;
+  gap: 8px;
+}
+
+/* Empurra os botões da direita para o fim da linha */
+.botoes-direita {
+  margin-left: auto;
+}
+
+.btn-success {
+  background-color: #28a745;
+  color: #fff;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  transition: background-color 0.2s;
+}
+.btn-success:hover {
+  background-color: #218838;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: #fff;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  transition: background-color 0.2s;
+}
+.btn-danger:hover {
+  background-color: #c82333;
+}
+
+/* CARD “Materiais Cadastrados” */
+.card-list {
+  border-radius: 0 0 8px 8px; /* só mantém o arredondado embaixo */
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  overflow: hidden;
+  flex: 1; 
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 160px); 
+}
+
+.card-list .card-header {
+  display: flex;
+  background-color: #fff;
+  padding: 8px 16px;
+  justify-content: space-between;
+  position: relative;
+  padding: 8px 16px;  /* mantenha o padding enxuto */
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.card-list .card-header h2 {
+  left: 50%;
+  text-align: center;
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+/* Botão “Excluir Selecionados” no canto direito, verticalmente centralizado */
+.btn-delete-selected {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  
+  background-color: #dc3545;
+  color: #fff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background-color 0.2s;
+}
+.btn-delete-selected:hover {
+  background-color: #c82333;
+}
+
+/* Interno do card-list */
+.card-list .card-body {
+  flex: 1;
+  overflow: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 350px; 
+}
+
+
+/* Tabela de materiais COM BARRA DE ROLAGEM INTERNA */
+.table-container {
+  margin: 0; 
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
+/* Cabeçalho fixo ao rolar */
+table thead th {
+  position: sticky;
+  top: 0; /* fixa no topo do scroll do contêiner */
+  background-color: #f8f9fa;
+  z-index: 2; /* usa 2 só para garantir que fique acima do conteúdo */
+  box-shadow: 0 2px 4px rgba(0,0,0,0.04); /* visual bonito ao rolar */
+  border-bottom: 1px solid #e0e0e0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #fff;
+}
+
+table th,
+table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 0.95rem;
+}
+
+table th {
+  color: #333;
+  text-align: left;
+}
+
+table tr:nth-child(even) {
+  background-color: #fbfbfb;
+}
+
+table tr:hover {
+  background-color: #f1f3f5;
+}
+
+table .col-actions {
+  width: 140px;
+  text-align: center;
+}
+
+table .no-data {
+  text-align: center;
+  color: #777;
+  padding: 24px;
+}
+
+/* Inputs inline (desabilitados) */
+.input-inline {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 0.95rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  transition: border-color 0.2s;
+}
+.input-inline:disabled {
+  background-color: transparent;
+  border-color: transparent;
+  color: #333;
+  cursor: default;
+}
+.input-inline:not(:disabled) {
+  background-color: #fff;
+}
+.input-inline:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+/* Ícones de ação */
+.icon {
+  font-size: 1.rem;
+  margin: 0 6px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.icon:hover {
+  transform: scale(1.1);
+}
+.edit-icon {
+  color: #007bff;
+}
+.save-icon {
+  color: #28a745;
+}
+.delete-icon {
+  color: #dc3545;
+}
+.hidden {
+  display: none;
+}
+
+/* Responsividade */
+@media (max-width: 600px) {
+  .form-row.horizontal {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .form-group label {
+    margin-bottom: 4px;
+  }
+  table th,
+  table td {
+    padding: 10px 12px;
+  }
+  .icon {
+    margin: 0 4px;
+    font-size: 1rem;
+  }
+}
+
+/* Barra de pesquisa dentro do card-add */
+.search-container {
+  margin-bottom: 16px;
+}
+.search-container input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  transition: border-color 0.2s;
+}
+.search-container input:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+/* Alinhamento dos botões da terceira linha */
+.form-row.form-row-submit {
+  justify-content: space-between; /* distribui os grupos de botões */
+}
+
+input[type="checkbox"] {
+  cursor: pointer;
+}
+
+/* ========== Flash messages (copiado de fornecedores.css) ========== */
+.flash-messages {
+  margin-bottom: 16px;
+}
+.flash {
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+.flash.sucesso {
+  background-color: #e6ffed;
+  border-left: 4px solid #28a745;
+  color: #155724;
+}
+.flash.erro {
+  background-color: #ffe6e6;
+  border-left: 4px solid #dc3545;
+  color: #721c24;
+}
+.flash.info {
+  background-color: #e6f0ff;
+  border-left: 4px solid #007bff;
+  color: #004085;
+}

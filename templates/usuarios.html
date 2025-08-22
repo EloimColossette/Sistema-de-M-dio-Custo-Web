@@ -1,0 +1,185 @@
+<!-- templates/usuarios.html -->
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gestão de Usuários</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/usuarios.css') }}">
+  <link rel="icon" href="{{ url_for('static', filename='logos/Kametal.ico') }}" type="image/x-icon" />
+</head>
+<body>
+  <div class="container">
+    <header class="page-header">
+      <a href="{{ url_for('dashboard.dashboard') }}" class="btn-icon" title="Voltar para o Dashboard">← Dashboard</a>
+      <h1 class="page-title">Usuários</h1>
+    </header>
+
+    <section class="actions">
+      <!-- adicionamos name="q" e já preenchemos com {{ search }} -->
+      <input
+        type="text"
+        id="search"
+        name="q"
+        placeholder="Buscar usuários..."
+        value="{{ search }}"
+      />
+
+      <!-- adicionamos name="status" e preenchemos com {{ status }} -->
+      <select id="statusFilter" name="status">
+        <option value="" {% if status == "" %}selected{% endif %}>Todos</option>
+        <option value="1" {% if status == "1" %}selected{% endif %}>Ativos</option>
+        <option value="0" {% if status == "0" %}selected{% endif %}>Inativos</option>
+      </select>
+
+      <button id="btnNew" class="btn btn-primary" title="Criar novo usuário">+ Novo</button>
+
+      <button id="btnDeleteSelected"
+              class="btn btn-danger"
+              title="🗑️ Excluir Selecionados"
+              style="display: none; margin-left: 0.5rem;">
+        🗑️ Excluir Selecionados
+      </button>
+    </section>
+
+    <!-- Flash messages (abaixo de filtros) -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for category, msg in messages %}
+            <div class="flash {{ category }}">{{ msg }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <table class="table" id="userTable">
+      <thead>
+        <tr>
+          <th>
+            <input type="checkbox" id="selectAll">
+          </th>
+          <th>Nome</th>
+          <th>E-mail</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr data-id="{{ u.id }}"
+            data-first="{{ u.first_name }}"
+            data-last="{{ u.last_name }}"
+            data-email="{{ u.email }}"
+            data-ativo="{{ u.ativo }}">
+          <td>
+            <input type="checkbox" class="row-checkbox">
+          </td>
+          <td>{{ u.first_name }} {{ u.last_name }}</td>
+          <td>{{ u.email }}</td>
+          <td>
+            {% if u.ativo %}
+              <span class="badge badge-success">Ativo</span>
+            {% else %}
+              <span class="badge badge-danger">Inativo</span>
+            {% endif %}
+          </td>
+          <td class="actions-cell">
+            <!-- Botão “Alternar Ativo/Inativo” -->
+            <form method="POST"
+                  action="{{ url_for('usuarios.toggle_usuario', user_id=u.id) }}"
+                  class="inline-form"
+                  data-confirm-msg="Deseja realmente {{ 'inativar' if u.ativo else 'ativar' }} este usuário?"
+                  onsubmit="return confirm(this.dataset.confirmMsg);">
+              <button type="submit"
+                      class="btn btn-sm btn-outline-warning"
+                      title="{{ 'Inativar' if u.ativo else 'Ativar' }} Usuário">
+                {% if u.ativo %}
+                  🔒
+                {% else %}
+                  🔓
+                {% endif %}
+              </button>
+            </form>
+
+            <!-- Permissões: futuro controle de acesso -->
+            <button type="button" class="btn btn-sm btn-outline-info btn-permissions" title="Permissões">🛡️</button>
+
+            <!-- Botão de edição -->
+            <button type="button" class="btn btn-sm btn-outline-secondary btn-edit" title="Editar Usuário">✏️</button>
+
+            <!-- Botão “Excluir” -->
+            <form method="POST"
+                  action="{{ url_for('usuarios.delete_usuario', user_id=u.id) }}"
+                  class="inline-form"
+                  onsubmit="return confirm('Tem certeza que deseja excluir este usuário?');">
+              <button type="submit" class="btn btn-sm btn-outline-danger" title="Excluir Usuário">🗑️</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">Nenhum usuário encontrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <nav class="pagination" id="pagination">
+      {% if page > 1 %}
+        <a href="{{ url_for('usuarios.usuarios',
+                            page=page-1,
+                            q=search,
+                            status=status) }}">Anterior</a>
+      {% endif %}
+      <span>Página {{ page }} de {{ total_pages }}</span>
+      {% if page < total_pages %}
+        <a href="{{ url_for('usuarios.usuarios',
+                            page=page+1,
+                            q=search,
+                            status=status) }}">Próxima</a>
+      {% endif %}
+    </nav>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal" id="userModal">
+    <div class="modal-content">
+      <span class="close-modal" id="closeModal">×</span>
+      <h2 id="modalTitle">Novo Usuário</h2>
+      <form id="userForm" method="POST" action="{{ url_for('usuarios.create_usuario') }}">
+        <input type="hidden" id="userId" name="user_id">
+
+        <label for="firstName">Primeiro Nome</label>
+        <input type="text" id="firstName" name="first_name" required>
+
+        <label for="lastName">Sobrenome</label>
+        <input type="text" id="lastName" name="last_name" required>
+
+        <label for="userEmail">E-mail</label>
+        <input type="email" id="userEmail" name="email" required>
+
+        <label for="userPass">Senha (8 dígitos numéricos)</label>
+        <input
+          type="password"
+          id="userPass"
+          name="senha"
+          placeholder="12345678"
+          pattern="\d{8}"
+          title="Digite exatamente 8 dígitos numéricos"
+        >
+        <div class="input-feedback"></div>
+
+        <!-- Checkbox para “ativo” -->
+        <label for="userAtivo">
+          <input type="checkbox" id="userAtivo" name="ativo">
+          Ativo
+        </label>
+
+        <button type="submit" class="btn btn-primary">Salvar</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/usuarios.js') }}"></script>
+</body>
+</html>

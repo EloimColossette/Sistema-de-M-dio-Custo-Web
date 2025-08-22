@@ -1,0 +1,115 @@
+<!-- templates/primeiro_login.html -->
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Definir Nova Senha</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- Reutilizamos o mesmo CSS do login -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" href="{{ url_for('static', filename='logos/Kametal.ico') }}" type="image/x-icon" />
+</head>
+<body>
+  <div class="login-wrapper">
+    <div class="login-card">
+      <div class="logo">
+        <img src="{{ url_for('static', filename='logos/Kametal.png') }}" alt="Logo" />
+      </div>
+
+      <form method="POST" autocomplete="off" id="primeiroLoginForm" novalidate action="{{ url_for('auth.primeiro_login') }}">
+        {% with messages = get_flashed_messages(with_categories=True) %}
+          {% for cat, msg in messages %}
+            <div class="mensagem {{ cat }}">{{ msg }}</div>
+          {% endfor %}
+        {% endwith %}
+
+        <h2>Crie sua Nova Senha</h2>
+
+        <!-- Novo campo de senha (8 dígitos numéricos) -->
+        <div class="input-group">
+          <label for="nova_senha">Nova Senha (8 dígitos numéricos)</label>
+          <div class="password-wrapper">
+            <input type="password"
+                   id="nova_senha"
+                   name="nova_senha"
+                   placeholder="••••••••"
+                   required
+                   pattern="\d{8}"
+                   title="Digite exatamente 8 dígitos numéricos" />
+            <div class="eye-toggle" id="toggleNew">
+              <!-- Olho aberto -->
+              <svg class="eye-show" xmlns="http://www.w3.org/2000/svg" fill="none"
+                   viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5
+                         s8.268 2.943 9.542 7
+                         c-1.274 4.057-5.065 7-9.542 7
+                         s-8.268-2.943-9.542-7z" />
+              </svg>
+              <!-- Olho fechado -->
+              <svg class="eye-hide" xmlns="http://www.w3.org/2000/svg" fill="none"
+                   viewBox="0 0 24 24" stroke="currentColor" width="20" height="20" style="display: none;">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M13.875 18.825A10.05 10.05 0 0112 19
+                         c-4.477 0-8.268-2.943-9.542-7
+                         a9.962 9.962 0 012.293-3.95
+                         M6.423 6.423A9.96 9.96 0 0112 5
+                         c4.477 0 8.268 2.943 9.542 7
+                         a9.957 9.957 0 01-4.185 5.255
+                         M3 3l18 18" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Campo de confirmação da nova senha -->
+        <div class="input-group">
+          <label for="confirmar_senha">Confirme a Nova Senha</label>
+          <div class="password-wrapper">
+            <input type="password"
+                   id="confirmar_senha"
+                   name="confirmar_senha"
+                   placeholder="••••••••"
+                   required
+                   pattern="\d{8}"
+                   title="Digite exatamente 8 dígitos numéricos" />
+            <div class="eye-toggle" id="toggleConfirm">
+              <!-- Olho aberto -->
+              <svg class="eye-show" xmlns="http://www.w3.org/2000/svg" fill="none"
+                   viewBox="0 0 24 24" stroke="currentColor" width="20" height="20">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5
+                         s8.268 2.943 9.542 7
+                         c-1.274 4.057-5.065 7-9.542 7
+                         s-8.268-2.943-9.542-7z" />
+              </svg>
+              <!-- Olho fechado -->
+              <svg class="eye-hide" xmlns="http://www.w3.org/2000/svg" fill="none"
+                   viewBox="0 0 24 24" stroke="currentColor" width="20" height="20" style="display: none;">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M13.875 18.825A10.05 10.05 0 0112 19
+                         c-4.477 0-8.268-2.943-9.542-7
+                         a9.962 9.962 0 012.293-3.95
+                         M6.423 6.423A9.96 9.96 0 0112 5
+                         c4.477 0 8.268 2.943 9.542 7
+                         a9.957 9.957 0 01-4.185 5.255
+                         M3 3l18 18" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit">Confirmar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Reutilize o mesmo JS de form.js para alternar o eye-toggle -->
+  <script src="{{ url_for('static', filename='js/form.js') }}"></script>
+
+</body>
+</html>

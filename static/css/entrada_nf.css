@@ -1,0 +1,438 @@
+/* static/css/entrada_nf.css */
+
+/* RESET & TIPOGRAFIA (copiada de saida_nf.css) */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Inter', sans-serif;
+}
+
+html, body {
+  height: 100%;
+  background-color: #f0f2f5;
+  color: #333;
+}
+
+#entrada-nf-page {
+  display: flex;
+  flex-direction: column;
+}
+
+/* CARD “Entrada de NF” */
+#entrada-nf-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;          /* ocupa no mínimo a altura toda */
+}
+
+.card-add {
+  background-color: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  flex: 1;                    /* ocupa todo o espaço vertical disponível */
+  display: flex;
+  flex-direction: column;
+}
+.card-add .card-header {
+  background: linear-gradient(180deg, #000 0%, #4a4a4a 50%, #667eea 100%);
+  padding: 16px;
+  position: relative;
+}
+.card-add .card-header h2 {
+  color: #fff;
+  font-size: 1.75rem;
+  text-align: center;
+}
+.btn-back-dashboard {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #007bff;
+  text-decoration: none;
+  font-size: 1.2rem;
+  padding: 4px 8px;
+}
+.btn-back-dashboard:hover {
+  text-decoration: underline;
+}
+.card-add .card-body {
+  padding: 16px;
+  flex: 1;                    /* faz o corpo crescer */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Form rows */
+/* Espaçamento entre as seções de produtos */
+.form-row.horizontal + .form-row.horizontal {
+  margin-top: 16px;  /* ou ajuste para mais/menos conforme quiser */
+}
+
+.form-row.horizontal {
+  display: flex;
+  gap: 12px;
+}
+.form-row.align-end {
+  align-items: flex-end;
+}
+.form-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.form-group.full-width {
+  flex: 1 1 100%;
+  margin-top: 16px;
+}
+.form-group label {
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 4px;
+  font-size: 0.9rem;
+}
+.form-group input,
+.form-group textarea {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+.form-group select {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.form-group select:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+/* Ações do formulário */
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+.btn-primary {
+  background-color: #007bff;
+  color: #fff;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.btn-primary:hover {
+  background-color: #0056b3;
+}
+.btn-secondary {
+  background-color: #218838;
+  color: #fff;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.btn-secondary:hover {
+  background-color: #218838;
+}
+
+/* Botão remover com estilo igual ao adicionar, mas vermelho */
+.btn-danger {
+  background-color: #dc3545;   /* vermelho Bootstrap */
+  color: #fff;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.btn-danger:hover {
+  background-color: #bd2130;  /* vermelho mais escuro no hover */
+}
+
+/* FLASH MESSAGES */
+.flash-messages {
+  margin-bottom: 16px;
+}
+.flash {
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+.flash.sucesso {
+  background-color: #e6ffed;
+  border-left: 4px solid #28a745;
+  color: #155724;
+}
+.flash.erro {
+  background-color: #ffe6e6;
+  border-left: 4px solid #dc3545;
+  color: #721c24;
+}
+
+/* FIELDSET DE MATERIAIS */
+/* Espaço e layout dos botões de adicionar/remover */
+.btns-material,
+.btns-duplicata {
+  display: flex;
+  gap: 8px;             /* espaço entre os dois botões */
+  margin-top: 12px;     /* espaço acima, entre os campos e os botões */
+}
+
+.materiais-fieldset {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 16px;
+  margin: 16px 0;
+}
+.materiais-fieldset legend {
+  padding: 0 8px;
+  font-weight: 600;
+  color: #555;
+}
+.materiais-fieldset .form-row.horizontal.align-end {
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+/* Grid de duplicatas: 3 por linha */
+#duplicatas-container {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* até 3 por linha */
+  gap: 12px;
+}
+
+.duplicata-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.duplicata-row .form-group {
+  flex: 1;
+}
+
+.duplicatas-fieldset {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 16px;
+  margin: 16px 0;
+}
+.duplicatas-fieldset legend {
+  padding: 0 8px;
+  font-weight: 600;
+  color: #555;
+}
+.duplicatas-fieldset .form-row.horizontal.align-end {
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+/* Responsivo */
+@media (max-width: 600px) {
+  .form-row.horizontal,
+  .materiais-fieldset .form-row.horizontal {
+    flex-direction: column;
+  }
+}
+
+/* ----- Modal Overlay ----- */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: none;
+  background-color: rgba(0,0,0,0.5);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+}
+.modal.show {
+  display: flex;
+}
+
+/* ----- Modal Content ----- */
+.modal-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+}
+
+/* ----- Modal Header ----- */
+.modal-header {
+  background: linear-gradient(180deg, #000 0%, #4a4a4a 50%, #667eea 100%);
+  color: #fff;
+  position: relative;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+}
+.modal-header h3 {
+  font-size: 1.5rem;
+  text-align: center;
+  margin: 8px 10px;
+  line-height: 1;
+}
+.modal-header .close {
+  position: absolute;
+  right: 0;
+  top: 0;
+  font-size: 1.5rem;
+  color: #fff;
+  cursor: pointer;
+  padding: 8px 16px;
+}
+
+/* ----- Search & Filter (abaixo do header) ----- */
+.search-and-filter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  gap: 8px;
+}
+.search-and-filter .search-container {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-right: auto;
+}
+.search-and-filter .search-container input {
+  width: 240px;
+  padding: 7px 7px;
+  font-size: 0.85rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+.search-and-filter button.btn-secondary {
+  padding: 6px 12px;
+}
+
+/* ----- Modal Body (tabela) ----- */
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+}
+.table-container {
+  overflow-x: auto;
+}
+.table-container table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+.table-container th,
+.table-container td {
+  padding: 12px 8px;
+  text-align: left;
+  vertical-align: middle;
+  font-size: 0.9rem;
+  color: #333;
+  border: 1px solid #ddd;
+}
+.table-container thead th {
+  background: #2b6cb0;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-align: center;
+  white-space: nowrap;
+  height: 36px;
+  line-height: 32px;
+}
+.table-container tbody tr:nth-child(even) { background: #f7fafc; }
+.table-container tbody tr:hover       { background: #e9eef3; }
+
+/* ----- Paginação ----- */
+.pagination {
+  text-align: center;
+  margin: 8px 0;
+}
+.pagination a,
+.pagination span {
+  margin: 0 3px;
+  padding: 4px 8px;
+  text-decoration: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #007bff;
+}
+.pagination a:hover {
+  background-color: #007bff;
+  color: white;
+}
+.pagination span.current {
+  font-weight: bold;
+  text-decoration: underline;
+  color: black;
+  border: none;
+}
+
+/* 3) Ajuste do dropdown “Colunas” */
+.dropdown-container-inline {
+  position: relative;
+  display: inline-block;
+  margin: 0 8px;
+}
+.dropdown-input-inline {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #fff;
+}
+.dropdown-input-inline .placeholder {
+  margin-right: 4px;
+}
+.dropdown-list-inline {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  list-style: none;
+  padding: 4px 0;
+  display: none;
+  z-index: 1100;
+}
+.dropdown-list-inline li {
+  padding: 6px 12px;
+}
+.dropdown-list-inline li:hover {
+  background: #f1f3f5;
+}
+/* classe para exibir a lista */
+.dropdown-list-inline.show {
+  display: block;
+}
+
+.dropdown-container-inline {
+    margin: 8px 0;
+  }

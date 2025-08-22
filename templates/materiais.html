@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Materiais</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/materiais.css') }}">
+  <link rel="icon" href="{{ url_for('static', filename='logos/Kametal.ico') }}" type="image/x-icon" />
+</head>
+<body>
+  <div id="materiais-page">
+
+    <!-- CARD “Base Material” -->
+    <div class="card card-add">
+      <div class="card-header">
+        <h2>Base de Materiais</h2>
+        <a href="{{ url_for('dashboard.dashboard') }}" class="btn-back-dashboard">← Dashboard</a>
+      </div>
+      <div class="card-body">
+        <!-- Barra de pesquisa -->
+        <div class="search-container">
+          <input
+            type="text"
+            id="search_material"
+            placeholder="🔍 Pesquisar materiais cadastrados..."
+          />
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages">
+              {% for category, msg in messages %}
+                <div class="flash {{ category }}">{{ msg }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <form id="form-novo-material" action="{{ url_for('materiais.create_material') }}" method="post">
+          <!-- LINHA 1: Nome + Fornecedor -->
+          <div class="form-row horizontal">
+            <div class="form-group">
+              <label for="nome_material">Nome do Material:</label>
+              <input type="text"
+                     id="nome_material"
+                     name="nome_material"
+                     placeholder="Digite o nome"
+                     required>
+            </div>
+            <div class="form-group">
+              <label for="fornecedor_sel">Fornecedor:</label>
+              <select id="fornecedor_sel" name="fornecedor_sel" required>
+                <option value="">-- Selecione --</option>
+                {% for f in fornecedores %}
+                  <option value="{{ f.id }}">{{ f.nome }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- LINHA 2: Valor + Grupo -->
+          <div class="form-row horizontal">
+            <div class="form-group">
+              <label for="valor_material">Valor:</label>
+              <input type="text"
+                     id="valor_material"
+                     name="valor_material"
+                     placeholder="Ex.: 123,4567"
+                     required>
+            </div>
+            <div class="form-group">
+              <label>Grupo:</label>
+              <div class="radio-group">
+                <label><input type="radio" name="grupo_material" value="Cobre" checked> Cobre</label>
+                <label><input type="radio" name="grupo_material" value="Zinco"> Zinco</label>
+                <label><input type="radio" name="grupo_material" value="Sucata"> Sucata</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- LINHA 3: Botões com exportar à direita -->
+          <div class="form-row form-row-submit">
+            <div class="botoes-esquerda">
+              <button type="submit" class="btn-primary">Adicionar Material</button>
+              <a href="{{ url_for('fornecedores.fornecedores') }}" class="btn-secondary">Gerenciar Fornecedores</a>
+            </div>
+            <div class="botoes-direita">
+              <a href="{{ url_for('materiais.exportar_materiais_excel') }}" class="btn-success" target="_blank">📥 Exportar Excel</a>
+              <a href="{{ url_for('materiais.exportar_materiais_pdf') }}" class="btn-danger" target="_blank">📥 Exportar PDF</a>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- CARD “Materiais Cadastrados” -->
+    <div class="card card-list">
+      <div class="card-header">
+        <h2>Materiais Cadastrados</h2>
+        <!-- Form de exclusão em massa -->
+        <form id="form-delete-selecionados"
+              action="{{ url_for('materiais.delete_selecionados_materiais') }}"
+              method="post"
+              style="display:inline;">
+          <button
+            type="submit"
+            class="btn-secondary btn-delete-selected"
+            style="display: none;">
+            🗑️ Excluir Selecionados
+          </button>
+        </form>
+      </div>
+      <div class="card-body">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th><input type="checkbox" id="select-all" /></th>
+                <th>Nome</th>
+                <th>Fornecedor</th>
+                <th>Valor</th>
+                <th>Grupo</th>
+                <th class="col-actions">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in materiais %}
+              <tr data-id="{{ m.id }}">
+                <td>
+                  <input type="checkbox"
+                         name="material_ids"
+                         value="{{ m.id }}"
+                         class="row-checkbox"
+                         form="form-delete-selecionados" />
+                </td>
+                <td>
+                  <input type="text"
+                         class="input-inline"
+                         data-field="nome"
+                         value="{{ m.nome }}"
+                         disabled>
+                </td>
+                <td>
+                  <select class="input-inline"
+                          data-field="fornecedor_id"
+                          disabled>
+                    {% for f in fornecedores %}
+                      <option value="{{ f.id }}"
+                        {% if f.nome == m.fornecedor %} selected {% endif %}>
+                        {{ f.nome }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td>
+                  <input type="text"
+                         class="input-inline"
+                         data-field="valor"
+                         value="{{ ('%.4f'|format(m.valor)).replace('.', ',') }}"
+                         disabled>
+                </td>
+                <td>
+                  <select class="input-inline"
+                          data-field="grupo"
+                          disabled>
+                    <option value="Cobre" {% if m.grupo=='Cobre' %} selected {% endif %}>Cobre</option>
+                    <option value="Zinco" {% if m.grupo=='Zinco' %} selected {% endif %}>Zinco</option>
+                    <option value="Sucata" {% if m.grupo=='Sucata' %} selected {% endif %}>Sucata</option>
+                  </select>
+                </td>
+                <td class="col-actions">
+                  <span class="icon edit-icon" title="Editar">✏️</span>
+                  <span class="icon save-icon hidden" title="Salvar">💾</span>
+                  <!-- Form de exclusão individual -->
+                  <form action="{{ url_for('materiais.delete_material', mat_id=m.id) }}"
+                        method="post"
+                        class="inline-form"
+                        style="display:inline;">
+                    <button
+                      type="submit"
+                      class="icon delete-icon btn-delete-confirm"
+                      data-nome="{{ m.nome }}"
+                      title="Excluir">
+                      🗑️
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="6" class="no-data">Nenhum material cadastrado.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <script src="{{ url_for('static', filename='js/materiais.js') }}"></script>
+</body>
+</html>

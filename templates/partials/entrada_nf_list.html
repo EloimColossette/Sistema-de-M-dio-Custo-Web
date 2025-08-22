@@ -1,0 +1,84 @@
+<div id="modal-entradas" class="modal show">
+  <div class="modal-content">
+
+    <!-- Header estilizado igual ao saida_nf -->
+    <div class="modal-header">
+      <h3>Entradas de NF Cadastradas</h3>
+      <span id="fecharModalEntradaBtn" class="close">&times;</span>
+    </div>
+
+    <!-- Search / Export (opcional) -->
+    <div class="search-and-filter">
+        <div class="search-container">
+            <input type="text" id="searchEntradaInput" placeholder="🔍 Pesquisar NF, Fornecedor…" autocomplete="off" />
+            <button type="button" id="searchEntradaBtn" class="btn btn-secondary">🔍</button>
+        </div>
+
+        <!-- AQUI: Dropdown de colunas -->
+        <div class="dropdown-container-inline">
+            <label>Colunas:</label>
+            <div class="dropdown-input-inline" id="colToggleInput" tabindex="0">
+            <span class="placeholder">Selecionar colunas</span>
+            <span class="arrow">▾</span>
+            </div>
+            <ul class="dropdown-list-inline" id="colToggleList"></ul>
+        </div>
+
+        <button id="btnExportEntrada" class="btn btn-sm btn-secondary">Exportar</button>
+        </div>
+
+    <!-- Corpo da tabela -->
+    <div class="modal-body">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th><th>NF</th><th>Fornecedor</th>
+              <th>Material 1</th><th>Material 2</th><th>Material 3</th>
+              <th>Material 4</th><th>Material 5</th>
+              <th>Produto</th><th>Custo R$</th><th>IPI %</th>
+              <th>Valor Integral</th>
+              <th>Valor Unitario 1</th><th>Valor Unitario 2</th><th>Valor Unitario 3</th>
+              <th>Valor Unitario 4</th><th>Valor Unitario 5</th>
+              <th>Duplicata 1</th><th>Duplicata 2</th><th>Duplicata 3</th>
+              <th>Duplicata 4</th><th>Duplicata 5</th><th>Duplicata 6</th>
+              <th>Energia</th><th>M.O.</th>
+              <th>Peso Liq.</th><th>Peso Int.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in entradas %}
+            <tr>
+              {% for v in e %}
+                <td>{{ v }}</td>
+              {% endfor %}
+            </tr>
+            {% else %}
+            <tr><td colspan="22" class="no-data">Nenhuma entrada encontrada.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Paginação igual ao saida_nf -->
+    <div class="pagination">
+      {% if page > 1 %}
+        <a href="#" class="page-btn" data-page="1">« Primeiro</a>
+        <a href="#" class="page-btn" data-page="{{ page-1 }}">← Anterior</a>
+      {% endif %}
+      {% for p in range(1, total_pages+1) %}
+        {% if p == page %}
+          <span class="current">{{ p }}</span>
+        {% else %}
+          <a href="#" class="page-btn" data-page="{{ p }}">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if page < total_pages %}
+        <a href="#" class="page-btn" data-page="{{ page+1 }}">Próximo →</a>
+        <a href="#" class="page-btn" data-page="{{ total_pages }}">Último »</a>
+      {% endif %}
+    </div>
+
+  </div>
+</div>

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cadastro</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" 
+        href="{{ url_for('static', filename='logos/Kametal.ico') }}" 
+        type="image/x-icon" />
+</head>
+<body>
+  <div id="particles-js"></div>  <!-- Partículas no fundo -->
+  <div class="login-wrapper">
+    <div class="login-card">
+      <div class="logo">
+        <img src="{{ url_for('static', filename='logos/Kametal.png') }}" alt="Logo" />
+      </div>
+
+      <form method="POST" id="registerForm" novalidate>
+        {% with messages = get_flashed_messages(with_categories=True) %}
+          {% for cat, msg in messages %}
+            <div class="mensagem {{ cat }}">{{ msg }}</div>
+          {% endfor %}
+        {% endwith %}
+
+        <h2>Crie sua conta</h2>
+
+        <!-- Primeiro e Sobrenome lado a lado -->
+        <div class="input-row">
+          <div class="input-group half">
+            <label for="first_name">Primeiro nome</label>
+            <input type="text" id="first_name" name="first_name" placeholder="Fulano" required />
+            <div class="input-feedback"></div>
+          </div>
+          <div class="input-group half">
+            <label for="last_name">Sobrenome</label>
+            <input type="text" id="last_name" name="last_name" placeholder="da Silva" required />
+            <div class="input-feedback"></div>
+          </div>
+        </div>
+
+        <!-- Email -->
+        <div class="input-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" placeholder="seu@exemplo.com" required />
+          <div class="input-feedback"></div>
+        </div>
+
+        <!-- Senha (8 dígitos numéricos) -->
+        <div class="input-group password-group">
+          <label for="senha">Senha (8 dígitos numéricos)</label>
+          <div class="password-wrapper">
+            <input
+              type="password"
+              id="senha"
+              name="senha"
+              placeholder="••••••••"
+              required
+              pattern="\d{8}"
+              title="Digite exatamente 8 dígitos numéricos"
+            />
+            <div class="eye-toggle" id="togglePassword">
+              <img src="{{ url_for('static', filename='img/eye.svg') }}" alt="Mostrar senha" class="eye-show" />
+              <img src="{{ url_for('static', filename='img/eye-off.svg') }}" alt="Ocultar senha" class="eye-hide" style="display: none;" />
+            </div>
+          </div>
+          <div class="input-feedback"></div>
+        </div>
+
+        <!-- Confirmar Senha (8 dígitos numéricos) -->
+        <div class="input-group password-group">
+          <label for="confirmar_senha">Confirmar Senha</label>
+          <div class="password-wrapper">
+            <input
+              type="password"
+              id="confirmar_senha"
+              name="confirmar_senha"
+              placeholder="••••••••"
+              required
+              pattern="\d{8}"
+              title="Digite exatamente 8 dígitos numéricos"
+            />
+            <div class="eye-toggle" id="toggleConfirmPassword">
+              <img src="{{ url_for('static', filename='img/eye.svg') }}" alt="Mostrar senha" class="eye-show" />
+              <img src="{{ url_for('static', filename='img/eye-off.svg') }}" alt="Ocultar senha" class="eye-hide" style="display: none;" />
+            </div>
+          </div>
+          <div class="input-feedback"></div>
+        </div>
+
+        <button type="submit">Cadastrar</button>
+
+        <p class="link">
+          Já tem conta? <a href="{{ url_for('auth.login') }}">Login</a>
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/form.js') }}"></script>
+  <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
+  <script src="{{ url_for('static', filename='js/particles-init.js') }}"></script> <!-- seu arquivo com config -->
+</body>
+</html>

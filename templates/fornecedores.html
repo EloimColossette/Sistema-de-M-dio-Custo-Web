@@ -1,0 +1,116 @@
+<!-- templates/fornecedores.html -->
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Fornecedores</title>
+  <!-- Reaproveita estilos de Materiais -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/materiais.css') }}">
+  <!-- Só importe fornecedor.css para ajustes extras -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fornecedores.css') }}">
+  <link rel="icon" href="{{ url_for('static', filename='logos/Kametal.ico') }}" type="image/x-icon" />
+</head>
+<body>
+  <div id="fornecedores-page">
+
+    <!-- ADIÇÃO -->
+    <div class="card card-add">
+      <div class="card-header">
+        <h2>Fornecedores</h2>
+        <a href="{{ url_for('materiais.materiais') }}" class="btn-back-dashboard">← Materiais</a>
+      </div>
+      <div class="card-body">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages">
+              {% for category, msg in messages %}
+                <div class="flash {{ category }}">{{ msg }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+        <form id="form-novo-fornecedor" action="{{ url_for('fornecedores.create_fornecedor') }}" method="post">
+          <div class="form-row horizontal">
+            <div class="form-group">
+              <label for="nome_fornecedor">Nome do Fornecedor:</label>
+              <input type="text" id="nome_fornecedor" name="nome_fornecedor" placeholder="Digite o nome" required>
+            </div>
+            <button type="submit" class="btn-primary">Adicionar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- LISTAGEM -->
+    <div class="card card-list">
+      <div class="card-header">
+        <h2>Fornecedores Cadastrados</h2>
+        <!-- Botão excluir selecionados -->
+        <button
+          type="submit"
+          form="form-delete-selecionados"
+          class="btn-secondary btn-delete-selected hidden">
+          🗑️ Excluir Selecionados
+        </button>
+      </div>
+      <div class="card-body">
+        <form id="form-delete-selecionados"
+              action="{{ url_for('fornecedores.delete_selecionados_fornecedores') }}"
+              method="post">
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th><input type="checkbox" id="select-all" /></th>
+                  <th>Nome</th>
+                  <th class="col-actions">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for f in fornecedores %}
+                <tr data-id="{{ f.id }}">
+                  <td>
+                    <input type="checkbox"
+                          name="fornecedor_ids"
+                          value="{{ f.id }}"
+                          class="row-checkbox" />
+                  </td>
+                  <td>
+                    <input type="text"
+                          class="input-inline"
+                          data-field="nome"
+                          value="{{ f.nome }}"
+                          disabled>
+                  </td>
+                  <td class="col-actions">
+                    <span class="icon edit-icon" title="Editar">✏️</span>
+                    <span class="icon save-icon hidden" title="Salvar">💾</span>
+                    <form action="{{ url_for('fornecedores.delete_fornecedor', forn_id=f.id) }}"
+                          method="post"
+                          class="inline-form">
+                      <button
+                        type="submit"
+                        class="icon delete-icon btn-delete-confirm"
+                        data-nome="{{ f.nome }}"
+                        title="Excluir">
+                        🗑️
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+                {% else %}
+                <tr>
+                  <td colspan="3" class="no-data">Nenhum fornecedor cadastrado.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+  <script src="{{ url_for('static', filename='js/fornecedores.js') }}"></script>
+</body>
+</html>

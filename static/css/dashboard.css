@@ -1,0 +1,538 @@
+/* dashboard.css */
+
+/* 1. Paleta de cores e contraste */
+:root {
+  --color-primary: #667eea;
+  --color-primary-light: #63b3ed;
+  --color-secondary: #4a5568;
+  --color-bg: #f7fafc;
+  --color-card-bg: #ffffff;
+  --color-text: #2d3748;
+
+  --radius: 8px;
+  --gap: 16px;
+
+   --row-h: 30px;
+  --head-h: 40px;
+  --prod-rows: 5;
+  --mat-rows: 5;
+}
+
+/* Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+html, body {
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: hidden;
+}
+body {
+  display: flex;
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* Sidebar */
+.sidebar-hidden .sidebar {
+  transform: translateX(-100%);
+}
+
+.sidebar {
+  width: 220px;
+  background: linear-gradient(180deg, #000000 0%, #4a4a4a 50%, #667eea 100%);
+  color: #edf2f7;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width 0.3s ease;
+}
+
+
+.main.sidebar-hidden {
+  margin-left: 0;
+}
+
+.sidebar.collapsed {
+  width: 60px;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 6px;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.menu-item .icon {
+  font-size: 1.25rem;
+}
+.sidebar.collapsed .menu-item .label {
+  display: none;
+}
+.sidebar.collapsed .menu-item {
+  justify-content: center;
+  padding: 0.75rem 0;
+}
+/* Estado de hover */
+.menu-item:hover,
+.menu-item.active {
+  background: var(--color-secondary);
+  transform: translateX(4px);
+}
+
+/* Main & Header */
+.main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 2rem;
+  background: linear-gradient(90deg, #000000 0%, #4a4a4a 50%, #667eea 100%);
+  color: #fff;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+.header-left,
+.header-center,
+.header-right {
+  display: flex;
+  align-items: center;
+}
+.header-center {
+  flex: 1;
+  justify-content: center;  /* Centraliza logo e título */
+}
+.toggle-btn {
+  font-size: 1.25rem;
+  color: white;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.logo-title {
+  display: flex;
+  align-items: center;
+}
+.logo-title img {
+  height: 48px;
+}
+.logo-title h1 {
+  font-size: 2rem;
+  margin-left: 0.75rem;
+}
+.user-menu {
+  position: relative;
+  cursor: pointer;
+}
+.user-name {
+  font-weight: 600;
+  margin-right: 0.5rem;
+}
+.user-menu .dropdown {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 120%;
+  background: #ffffff;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 1000;
+  min-width: 180px;
+  padding: 0.5rem 0;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.dropdown a {
+  display: block;
+  padding: 0.75rem 1.25rem;
+  color: #2d3748;
+  text-decoration: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.dropdown a:hover {
+  background-color: #f0f4f8;
+  color: #4c51bf; /* cor roxa ou azul moderna */
+}
+
+
+.dropdown {
+  display: none;
+}
+
+.user-menu.open .dropdown {
+  display: block;
+}
+
+/* Abas */
+.tabs-nav {
+  position: relative;
+  display: flex;
+  gap: 1rem;
+  padding: 0.5rem 3rem;
+  margin-top: -5px;
+  background: #fff;
+  border-bottom: 2px solid #e2e8f0;
+}
+.tab-btn {
+  background: none;
+  border: none;
+  padding: 0.5rem 0;
+  font-weight: 600;
+  color: var(--color-secondary);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+/* Hover/Focus em abas */
+.tab-btn:hover,
+.tab-btn:focus {
+  color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(102,126,234,0.4);
+}
+.tab-btn.active {
+  color: var(--color-primary);
+}
+.tab-indicator {
+  position: absolute;
+  bottom: 0;
+  height: 3px;
+  background: var(--color-primary);
+  transition: left 0.3s ease, width 0.3s ease;
+}
+
+/* 7. Animações sutis */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.tab-content.active {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+/* Conteúdo */
+.content {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-y: auto;
+}
+.tabs-content {
+  padding: 2rem;
+  background: var(--color-bg);
+  flex: 1;
+  overflow-x: hidden;
+}
+.tab-content {
+  display: none;
+}
+.tab-content.active {
+  display: block;
+}
+
+/* Containers com sombra suave */
+.chart-container,
+.reports-grid .report-card,
+.alert-list li {
+  background: var(--color-card-bg);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+  transition: box-shadow 0.2s ease;
+}
+.chart-container:hover,
+.reports-grid .report-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+/* Listas e grids */
+.alert-list {
+  list-style: none;
+  padding: 0;
+}
+.alert-list li {
+  margin-bottom: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e2e8f0;
+}
+.reports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill,minmax(200px,1fr));
+  gap: 1rem;
+}
+
+/* Formulários */
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 500px;
+}
+.settings-form input,
+.settings-form select,
+.settings-form button {
+  padding: 0.5rem 1rem;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+}
+.settings-form button {
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+.settings-form button:hover {
+  background: #5a67d8;
+}
+
+/* ─────────── CSS Melhorado para Lista Suspensa ─────────── */
+
+/* 1. O “pai” que dispara o submenu (igual aos demais, sem setinha) */
+.menu-item.has-submenu {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 6px;
+  transition: background 0.2s ease, transform 0.2s ease;
+  cursor: pointer;
+  position: relative; /* para posicionar o submenu se preciso */
+}
+
+/* Destaque quando o submenu está aberto */
+.menu-item.has-submenu.submenu-open {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 2. A lista suspensa em si */
+.submenu {
+  list-style: none;
+  margin: 0.5rem 0 0 0; /* pequeno espaçamento em relação ao item pai */
+  padding: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+}
+
+/* Quando deve estar visível, definimos max-height alto o suficiente */
+.submenu.visible {
+  max-height: 200px; /* ajustável: cabe no sidebar */
+  opacity: 1;
+}
+
+/* 3. Cada item da lista */
+.submenu li {
+  margin: 0;
+}
+
+/* 4. Links internos */
+.submenu li a {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1.25rem;
+  color: #edf2f7;
+  text-decoration: none;
+  font-size: 0.9rem;
+  background-color: rgba(45, 55, 72, 0.9);
+  transition: background 0.2s ease, padding-left 0.2s ease;
+  border-radius: 0 6px 6px 0; /* arredondar apenas na lateral direita */
+}
+
+/* Ícone dentro do item */
+.submenu li a .sub-icon {
+  font-size: 1.1rem;
+}
+
+/* Label dentro do item */
+.submenu li a .sub-label {
+  flex: 1;
+}
+
+/* Hover em cada link */
+.submenu li a:hover {
+  background-color: rgba(102, 126, 234, 0.2);
+  padding-left: 1.5rem; /* leve recuo extra para efeito visual */
+}
+
+/* 5. Garante que o submenu fique dentro da largura do sidebar */
+.sidebar .submenu {
+  width: 100%;
+}
+
+/* 6. Quando o sidebar estiver colapsado, esconde completamente (opcional) */
+.sidebar.collapsed .submenu {
+  display: none;
+}
+
+/* 7. Para suavizar, podemos adicionar um box-shadow contextual */
+.submenu li a {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+/* Container tipo LabelFrame com scroll */
+.report-frame {
+  background: #ffffff;
+  border: 1px solid #ccc;
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);      
+}
+
+.report-frame::-webkit-scrollbar {
+  width: 8px;
+}
+.report-frame::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  z-index: 10;
+}
+
+.report-table th,
+.report-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 0.9rem;
+  text-align: center; 
+  word-break: break-word;
+}
+
+.report-table th {
+  background: var(--bg);
+  font-weight: 600;
+}
+
+.report-table tbody tr:nth-child(even) {
+  background: #f2f2f2;
+}
+
+/* Classe para ativar scroll somente quando necessário */
+.scrollable {
+  height: 300px;       /* ajuste a altura conforme quiser */
+  overflow-y: auto;    /* scroll vertical */
+}
+
+/* Personalize a largura da scrollbar (opcional) */
+.scrollable::-webkit-scrollbar {
+  width: 8px;
+}
+.scrollable::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+}
+
+/* Produtos: scroll após ~10 linhas */
+#prod-frame {
+  max-height: calc(var(--head-h) + var(--row-h) * var(--prod-rows));
+  overflow-y: auto;
+}
+
+/* Materiais: scroll após ~5 linhas */
+#mat-frame {
+  max-height: calc(var(--head-h) + var(--row-h) * var(--mat-rows));
+  overflow-y: auto;
+}
+
+.report-box {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #fff;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,0.1);
+}
+
+.report-box .table-responsive {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* estilos para o card de relatório */
+/* Título do relatório */
+.report-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 0.75rem;
+}
+
+/* Card ajustes */
+.report-card {
+  background-color: #ffffff;
+  border: none;
+  border-radius: 0.5rem;
+  box-shadow: 0 0.25rem 0.5rem rgba(0,0,0,0.1);
+  overflow: hidden;
+}
+
+
+/* header do relatório já usa classes do framework */
+/* .card-header { ... } */
+
+/* controla altura e rolagem da tabela */
+#nf-frame .report-table {
+  --row-h: 40px;    /* altura média de cada <tr> */
+  --hdr-h: 50px;    /* altura do <thead> */
+  max-height: calc(var(--hdr-h) + var(--row-h) * 10);
+  height: auto;                /* permite que diminua caso tenha menos de 10 linhas */
+  overflow-y: auto;           /* scroll aparece só se passar de 10 */
+}
+
+/* opcional: zebra stripes ou hover mais leve */
+.report-table table tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+.report-table table {
+  table-layout: auto;    /* permite colunas se ajustarem ao conteúdo */
+  width: 100%;
+}
+
+.report-table table th,
+.report-table table td {
+  white-space: normal;       /* permite quebra de linha */
+  word-wrap: break-word;     /* quebra palavras longas, se necessário */
+  overflow: visible;         /* remove o truncamento */
+  text-overflow: clip;       /* não usa “…” */
+}
+
+.report-table table th:nth-child(1),
+.report-table table td:nth-child(1) { width: 90px; }
+.report-table table th:nth-child(2),
+.report-table table td:nth-child(2) { width: 60px; }
+.report-table table th:nth-child(3),
+.report-table table td:nth-child(3) { width: 200px; }
+.report-table table th:nth-child(4),
+.report-table table td:nth-child(4) { width: 80px; text-align: right; }
+.report-table table th:nth-child(5),
+.report-table table td:nth-child(5) { width: 180px; }
+.report-table table th:nth-child(6),
+.report-table table td:nth-child(6) { width: 120px; }

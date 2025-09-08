@@ -56,6 +56,25 @@ html, body {
 .btn-back-dashboard:hover {
   text-decoration: underline;
 }
+
+.btn-acao {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  margin: 0 4px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.btn-acao:hover {
+  background: #eee;
+}
+
+.btn-editar { color: #007bff; }
+.btn-excluir { color: #dc3545; }
+
 .card-add .card-body {
   padding: 16px;
   flex: 1;                    /* faz o corpo crescer */
@@ -337,8 +356,10 @@ html, body {
 .table-container {
   overflow-x: auto;
 }
+
 .table-container table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   table-layout: auto;
 }
@@ -363,6 +384,58 @@ html, body {
 }
 .table-container tbody tr:nth-child(even) { background: #f7fafc; }
 .table-container tbody tr:hover       { background: #e9eef3; }
+
+
+.table-container th:last-child,
+.table-container td:last-child {
+  position: sticky;
+  right: 0;
+  background: #2b6cb0;
+  color: #fff;
+  z-index: 3;
+  border-left: 1px solid #ddd; /* separação visível */
+}
+
+.table-container th:first-child,
+.table-container td:first-child {
+  position: sticky;
+  left: 0;
+  background: #2b6cb0; /* mesma cor do cabeçalho */
+  color: #fff;          /* para checkbox no cabeçalho */
+  z-index: 3;
+  text-align: center;
+  border-right: 1px solid #ddd; /* separação visível */
+}
+
+.table-container tbody td:first-child,
+.table-container tbody td:last-child {
+    background-clip: padding-box; /* evita que o fundo "vaze" para fora da célula */
+}
+
+.table-container tbody tr:nth-child(even) td:first-child,
+.table-container tbody tr:nth-child(even) td:last-child {
+    background-color: #f7fafc; /* mesma cor das linhas pares */
+}
+
+.table-container tbody tr:nth-child(odd) td:first-child,
+.table-container tbody tr:nth-child(odd) td:last-child {
+    background-color: #fff; /* mesma cor das linhas ímpares */
+}
+
+.table-container thead th:first-child,
+.table-container thead th:last-child {
+    background: #2b6cb0; 
+    color: #fff;
+    border-left: 1px solid #ddd;
+    border-right: 1px solid #ddd;
+    z-index: 4; /* acima das células sticky do tbody */
+}
+
+/* Estilo para coluna Ações */
+td.acoes {
+  text-align: center;
+  white-space: nowrap;
+}
 
 /* ----- Paginação ----- */
 .pagination {
@@ -436,3 +509,54 @@ html, body {
 .dropdown-container-inline {
     margin: 8px 0;
   }
+
+.inline-list { list-style: none; padding: 0; margin: 0; }
+.inline-list li { margin-bottom: 4px; }
+
+/* estilos para as linhas da média ponderada */
+#modal-wavg {
+  display: none;            /* fica oculto por padrão */
+  justify-content: center;  /* só vai funcionar quando virar flex */
+  align-items: center;
+}
+
+.wavg-row input[type="number"] {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+#modal-wavg .modal-content {
+  position: relative;
+  max-width: 400px;
+  max-height: 400px;
+  width: 90%;
+  border-radius: 10px;
+  overflow: auto;
+  margin: 0; /* tira a margin para o flexbox centralizar */
+}
+#modal-wavg .modal-body { padding: 16px; }
+
+#modal-wavg.show {
+  display: flex; /* só aparece quando adicionamos a classe .show no JS */
+}
+
+/* aumenta a altura e deixa os inputs mais fáceis de digitar */
+.wavg-row input.wavg-value,
+.wavg-row input.wavg-weight {
+  height: 44px;
+  padding: 8px 12px;
+  font-size: 15px;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+/* resultado com mesma altura visual */
+.wavg-result {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 15px;
+}

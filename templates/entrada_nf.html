@@ -152,6 +152,7 @@
           <!-- Botões -->
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">Salvar Entrada</button>
+            <button type="button" id="btnOpenWAvg" class="btn btn-secondary">Calculadora Média Ponderada</button>
             <button type="button" id="btnVerEntradas" class="btn btn-secondary">Ver Entradas de NF</button>
           </div>
         </form>
@@ -161,6 +162,31 @@
     <!-- Modal de Entradas -->
     <div id="modal-entradas" class="modal">
       <div class="modal-content"></div>
+    </div>
+    <!-- Modal da Calculadora de Média Ponderada -->
+    <div id="modal-wavg" class="modal" aria-hidden="true">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Média Ponderada</h3>
+          <span id="closeWAvgBtn" class="close" aria-label="fechar">×</span>
+        </div>
+
+        <div class="modal-body" style="padding:16px;">
+          <div id="wavg-rows" style="display:flex; flex-direction:column; gap:8px;"></div>
+
+          <div style="margin-top:10px; display:flex; gap:8px; align-items:center;">
+            <button type="button" id="wavg-add-row" class="btn btn-secondary btn-sm">+ Linha</button>
+            <button type="button" id="wavg-remove-row" class="btn btn-danger btn-sm">– Remover</button>
+            <button type="button" id="wavg-clear" class="btn btn-secondary btn-sm">Limpar</button>
+            <button type="button" id="wavg-calc" class="btn btn-primary btn-sm">Calcular</button>
+          </div>
+
+          <div id="wavg-result" style="margin-top:12px; font-weight:600; font-size:1.05rem;"></div>
+          <p style="margin-top:8px; color:#666; font-size:0.9rem;">
+            Preencha Valor e Peso (peso = quantidade/coeficiente). Linhas com peso zero ou vazias são ignoradas.
+          </p>
+        </div>
+      </div>
     </div>
   </div>
 

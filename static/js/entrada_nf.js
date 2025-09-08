@@ -1150,7 +1150,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   // Auto-dismiss para banners/toasts tipo "Entrada de NF salva com sucesso!"
   (function autoDismissFlash() {
-    const AUTO_DISMISS_MS = 4000; // tempo até começar a desaparecer (ms)
+    const AUTO_DISMISS_MS = 2000; // tempo até começar a desaparecer (ms)
     const FADE_MS = 500; // duração do fade (ms)
 
     // seletores que normalmente contêm mensagens flash

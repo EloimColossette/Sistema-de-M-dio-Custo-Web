@@ -1,8 +1,12 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify, current_app as app
 from routes.auth_routes import login_required
 from conexao_db import conectar
 from datetime import datetime
 from math import ceil
+from werkzeug.utils import secure_filename
+import pandas as pd
+from psycopg2.extras import execute_values
+import re
 
 # Blueprint para Entrada de Nota Fiscal
 entrada_nf_bp = Blueprint('entrada_nf', __name__, url_prefix='/entrada_nf')
@@ -605,40 +609,165 @@ def editar_entrada(id):
 
     return jsonify({"status": "ok", "updated": updated})
 
+@entrada_nf_bp.route('/ids_all', methods=['POST'])
+@login_required
+def ids_all():
+    data = request.get_json(silent=True) or {}
+    q = (data.get('q') or '').strip()
+
+    conn = conectar()
+    cur = conn.cursor()
+    try:
+        # TODO: adapte a WHERE abaixo para os mesmos filtros usados em /listar
+        if q:
+            like = f"%{q}%"
+            sql = "SELECT id FROM entrada_nf WHERE referencia ILIKE %s OR fornecedor ILIKE %s"
+            cur.execute(sql, (like, like))
+        else:
+            sql = "SELECT id FROM entrada_nf"
+            cur.execute(sql)
+        rows = cur.fetchall() or []
+        ids = [r[0] for r in rows]
+        return jsonify({"ids": ids})
+    except Exception as e:
+        print("Erro em ids_all:", e)
+        return jsonify({"msg": "Erro ao buscar IDs"}), 500
+    finally:
+        try: cur.close()
+        except: pass
+        try: conn.close()
+        except: pass
+
 @entrada_nf_bp.route('/excluir', methods=['POST'])
 @login_required
 def excluir_entradas():
     """
-    Exclui uma ou várias entradas.
-    Espera JSON: { "ids": [1,2,3] }
-    Retorna JSON { status: "ok", removed: N } ou { status: "error", msg: "..." }
+    Exclui entradas.
+    Aceita:
+      - { "ids": [1,2,3] }              -> exclui esses ids (responde removed_ids / failed_ids)
+      - { "all_matching": true, "q": "texto", "filters": {...} }
+          -> exclui todas as entradas que batem no filtro/search (responde removed_ids / failed_ids)
+      - Para apagar tudo sem filtro: enviar { "all_matching": true, "confirm_all": true }
+    Retorna JSON {"status":"ok","removed": N, "removed_ids": [...], "failed_ids":[...]}
     """
-    import json
     try:
         data = request.get_json(silent=True) or {}
-        ids = data.get('ids') or []
-        # validação simples
-        if not isinstance(ids, list) or not ids:
-            return jsonify({"status": "error", "msg": "Nenhum id fornecido."}), 400
-        # converte para ints (filtra valores inválidos)
-        clean_ids = []
-        for i in ids:
-            try:
-                clean_ids.append(int(i))
-            except Exception:
-                continue
-        if not clean_ids:
-            return jsonify({"status": "error", "msg": "IDs inválidos."}), 400
-
-        placeholders = ','.join(['%s'] * len(clean_ids))
-        sql = f"DELETE FROM entrada_nf WHERE id IN ({placeholders})"
+        ids = data.get('ids')
+        all_matching = bool(data.get('all_matching'))
+        q = (data.get('q') or '').strip()
+        filters = data.get('filters') or {}
 
         conn = conectar()
         cur = conn.cursor()
+
         try:
-            cur.execute(sql, tuple(clean_ids))
-            removed = cur.rowcount if hasattr(cur, 'rowcount') else None
+            removed_ids = []
+            failed_ids = []
+
+            if all_matching:
+                # Monta cláusulas WHERE de forma segura (parametrizada)
+                where_clauses = []
+                params = []
+
+                # Busca simples (q) — adaptável: fornecedor, numero_nf, etc.
+                if q:
+                    like = f"%{q}%"
+                    where_clauses.append(
+                        "(LOWER(fornecedor) LIKE LOWER(%s) OR CAST(numero_nf AS TEXT) LIKE %s)"
+                    )
+                    params.extend([like, like])
+
+                # Exemplos de filtros opcionais (data range, fornecedor_id).
+                # IMPORTANT: espera-se que frontend envie datas em ISO 'YYYY-MM-DD'
+                if isinstance(filters, dict):
+                    if filters.get('date_from'):
+                        where_clauses.append("data_entrada >= %s")
+                        params.append(filters['date_from'])
+                    if filters.get('date_to'):
+                        where_clauses.append("data_entrada <= %s")
+                        params.append(filters['date_to'])
+                    if filters.get('fornecedor_id'):
+                        where_clauses.append("fornecedor_id = %s")
+                        params.append(filters['fornecedor_id'])
+                    # adicione outros filtros aqui conforme seu schema
+
+                if where_clauses:
+                    where_sql = " AND ".join(where_clauses)
+                    select_sql = f"SELECT id FROM entrada_nf WHERE {where_sql}"
+                    cur.execute(select_sql, tuple(params))
+                    rows = cur.fetchall()
+                    existing_ids = [int(r[0]) for r in rows] if rows else []
+
+                    if existing_ids:
+                        placeholders = ','.join(['%s'] * len(existing_ids))
+                        delete_sql = f"DELETE FROM entrada_nf WHERE id IN ({placeholders})"
+                        cur.execute(delete_sql, tuple(existing_ids))
+                        # marcando os realmente removidos como os existentes (cur.rowcount pode ajudar)
+                        removed_ids = existing_ids
+                        failed_ids = []
+                    else:
+                        removed_ids = []
+                        failed_ids = []
+                else:
+                    # Sem filtros: exige confirmação explícita para apagar tudo
+                    confirm_all = bool(data.get('confirm_all'))
+                    if not confirm_all:
+                        return jsonify({
+                            "status": "error",
+                            "msg": "Sem filtro fornecido. Para apagar tudo, envie confirm_all=true."
+                        }), 400
+                    # Seleciona todos os ids antes de deletar
+                    cur.execute("SELECT id FROM entrada_nf")
+                    rows = cur.fetchall()
+                    existing_ids = [int(r[0]) for r in rows] if rows else []
+                    if existing_ids:
+                        placeholders = ','.join(['%s'] * len(existing_ids))
+                        cur.execute(f"DELETE FROM entrada_nf WHERE id IN ({placeholders})", tuple(existing_ids))
+                        removed_ids = existing_ids
+                        failed_ids = []
+                    else:
+                        removed_ids = []
+                        failed_ids = []
+
+            else:
+                # Fluxo antigo: ids específicos
+                if not ids or not isinstance(ids, list):
+                    return jsonify({"status": "error", "msg": "Nenhum id fornecido."}), 400
+
+                clean_ids = []
+                for i in ids:
+                    try:
+                        clean_ids.append(int(i))
+                    except Exception:
+                        continue
+                if not clean_ids:
+                    return jsonify({"status": "error", "msg": "IDs inválidos."}), 400
+
+                # Primeiro, selecionar quais desses ids realmente existem
+                placeholders = ','.join(['%s'] * len(clean_ids))
+                cur.execute(f"SELECT id FROM entrada_nf WHERE id IN ({placeholders})", tuple(clean_ids))
+                rows = cur.fetchall()
+                existing_ids = [int(r[0]) for r in rows] if rows else []
+
+                # ids que não existiam
+                failed_ids = [i for i in clean_ids if i not in existing_ids]
+
+                if existing_ids:
+                    placeholders_exist = ','.join(['%s'] * len(existing_ids))
+                    cur.execute(f"DELETE FROM entrada_nf WHERE id IN ({placeholders_exist})", tuple(existing_ids))
+                    removed_ids = existing_ids
+                else:
+                    removed_ids = []
+
+            # commit e resposta com detalhes
             conn.commit()
+            removed = len(removed_ids)
+            return jsonify({
+                "status": "ok",
+                "removed": removed,
+                "removed_ids": removed_ids,
+                "failed_ids": failed_ids
+            })
         except Exception as e:
             conn.rollback()
             print("Erro ao excluir entradas:", e)
@@ -649,58 +778,95 @@ def excluir_entradas():
             try: conn.close()
             except: pass
 
-        return jsonify({"status": "ok", "removed": removed or len(clean_ids)})
     except Exception as exc:
         print("Exceção em excluir_entradas:", exc)
         return jsonify({"status": "error", "msg": "Erro interno."}), 500
 
-
-
 @entrada_nf_bp.route('/listar')
 @login_required
 def listar_entradas():
-    page = request.args.get('page', 1, type=int)
+    page = int(request.args.get('page', 1))
     per_page = 10
+    search = (request.args.get('search') or '').strip()
 
     conexao = conectar()
     cursor = conexao.cursor()
     try:
-        cursor.execute('SELECT COUNT(*) FROM entrada_nf')
-        total = cursor.fetchone()[0]
+        if search:
+            # Pré-processamento (igual saida_nf)
+            clean_search = re.sub(r'[.\-\/]', '', search)
+            like = f"%{search}%"
 
-        offset = (page - 1) * per_page
-        sql = '''
-            SELECT id,
-                   data, nf, fornecedor,
-                   material_1, material_2, material_3, material_4, material_5,
-                   produto, custo_empresa, ipi, valor_integral,
-                   valor_unitario_1, valor_unitario_2, valor_unitario_3,
-                   valor_unitario_4, valor_unitario_5,
-                   duplicata_1, duplicata_2, duplicata_3,
-                   duplicata_4, duplicata_5, duplicata_6,
-                   valor_unitario_energia, valor_mao_obra_tm_metallica,
-                   peso_liquido, peso_integral
-            FROM entrada_nf
-            ORDER BY data DESC, nf DESC
-            LIMIT %s OFFSET %s
-        '''
-        cursor.execute(sql, (per_page, offset))
-        linhas = cursor.fetchall()
+            # Se for dd/mm/YYYY, converte para YYYY-MM-DD
+            try:
+                data_formatada = datetime.strptime(search, '%d/%m/%Y').strftime('%Y-%m-%d')
+            except Exception:
+                data_formatada = ''
+
+            cursor.execute(
+                """
+                SELECT id,
+                       data, nf, fornecedor,
+                       material_1, material_2, material_3, material_4, material_5,
+                       produto, custo_empresa, ipi, valor_integral,
+                       valor_unitario_1, valor_unitario_2, valor_unitario_3,
+                       valor_unitario_4, valor_unitario_5,
+                       duplicata_1, duplicata_2, duplicata_3,
+                       duplicata_4, duplicata_5, duplicata_6,
+                       valor_unitario_energia, valor_mao_obra_tm_metallica,
+                       peso_liquido, peso_integral
+                FROM entrada_nf
+                WHERE unaccent(nf::text)         ILIKE unaccent(%s)
+                   OR unaccent(fornecedor::text) ILIKE unaccent(%s)
+                   OR unaccent(produto::text)    ILIKE unaccent(%s)
+                   OR unaccent(material_1::text) ILIKE unaccent(%s)
+                   OR unaccent(material_2::text) ILIKE unaccent(%s)
+                   OR unaccent(material_3::text) ILIKE unaccent(%s)
+                   OR unaccent(material_4::text) ILIKE unaccent(%s)
+                   OR unaccent(material_5::text) ILIKE unaccent(%s)
+                   OR data::text = %s
+                ORDER BY data DESC, nf DESC
+                """,
+                (like, like, like, like, like, like, like, like, data_formatada)
+            )
+            linhas = cursor.fetchall()
+            total_pages = 1
+            page = 1
+
+        else:
+            cursor.execute("SELECT COUNT(*) FROM entrada_nf")
+            total = cursor.fetchone()[0] or 0
+            total_pages = (total + per_page - 1) // per_page
+            offset = (page - 1) * per_page
+
+            cursor.execute(
+                """
+                SELECT id,
+                       data, nf, fornecedor,
+                       material_1, material_2, material_3, material_4, material_5,
+                       produto, custo_empresa, ipi, valor_integral,
+                       valor_unitario_1, valor_unitario_2, valor_unitario_3,
+                       valor_unitario_4, valor_unitario_5,
+                       duplicata_1, duplicata_2, duplicata_3,
+                       duplicata_4, duplicata_5, duplicata_6,
+                       valor_unitario_energia, valor_mao_obra_tm_metallica,
+                       peso_liquido, peso_integral
+                FROM entrada_nf
+                ORDER BY data DESC, nf DESC
+                LIMIT %s OFFSET %s
+                """,
+                (per_page, offset)
+            )
+            linhas = cursor.fetchall()
 
         entradas = [_linha_para_entrada(l) for l in linhas]
 
-        max_materiais = 0
-        max_duplicatas = 0
-        for e in entradas:
-            if isinstance(e.get('materiais'), list):
-                max_materiais = max(max_materiais, len(e['materiais']))
-            if isinstance(e.get('duplicatas'), list):
-                max_duplicatas = max(max_duplicatas, len(e['duplicatas']))
+        max_materiais = max((len(e['materiais']) for e in entradas if isinstance(e.get('materiais'), list)), default=0)
+        max_duplicatas = max((len(e['duplicatas']) for e in entradas if isinstance(e.get('duplicatas'), list)), default=0)
 
-        max_materiais = min(max_materiais or 0, MAX_MATERIAIS_DB)
-        max_duplicatas = min(max_duplicatas or 0, MAX_DUPLICATAS_DB)
+        max_materiais = min(max_materiais, MAX_MATERIAIS_DB)
+        max_duplicatas = min(max_duplicatas, MAX_DUPLICATAS_DB)
 
-        total_pages = ceil(total / per_page)
     finally:
         cursor.close()
         conexao.close()
@@ -713,3 +879,248 @@ def listar_entradas():
         max_materiais=max_materiais,
         max_duplicatas=max_duplicatas
     )
+
+ALLOWED_EXT = {'xls', 'xlsx'}
+
+def _normalize_colname(s):
+    s = str(s or '').strip().lower()
+    s = re.sub(r'[\s\-_]+', '', s)
+    s = re.sub(r'[^\w]', '', s)  # remove caracteres não alfanuméricos
+    return s
+
+def _to_str_safe(v):
+    """Converte para string limpa ou None se vazio/NaN."""
+    if v is None or pd.isna(v):
+        return None
+    s = str(v).strip()
+    if s.lower() in ('', 'nan', 'none', 'null'):
+        return None
+    return s
+
+def _to_float_safe(v):
+    """Converte valores para float, respeitando vírgulas/pontos. Retorna None se vazio."""
+    try:
+        if v is None or pd.isna(v):
+            return None
+        if isinstance(v, (int, float)):
+            return float(v)
+        s = str(v).strip()
+        if s.lower() in ('', 'nan', 'none', 'null'):
+            return None
+        # remove milhar, troca vírgula por ponto
+        s = s.replace(' ', '').replace('.', '').replace(',', '.')
+        s = re.sub(r'[^0-9\.\-]', '', s)
+        if not s or s in ('-', '.'):
+            return None
+        return float(s)
+    except Exception:
+        return None
+
+@entrada_nf_bp.route('/importar_excel', methods=['POST'])
+@login_required
+def importar_excel_entrada():
+    arquivo = request.files.get('arquivo_excel')
+    if not arquivo:
+        msg = 'Nenhum arquivo enviado.'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify(error=msg), 400
+        flash(msg, 'danger')
+        return redirect(url_for('entrada_nf.entradas_nf'))
+
+    filename = secure_filename(arquivo.filename or '')
+    if '.' not in filename:
+        msg = 'Arquivo sem extensão.'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify(error=msg), 400
+        flash(msg, 'danger')
+        return redirect(url_for('entrada_nf.entradas_nf'))
+
+    ext = filename.rsplit('.', 1)[1].lower()
+    if ext not in ALLOWED_EXT:
+        msg = 'Extensão não permitida. Use .xls ou .xlsx'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify(error=msg), 400
+        flash(msg, 'danger')
+        return redirect(url_for('entrada_nf.entradas_nf'))
+
+    try:
+        arquivo.stream.seek(0)
+        engine = 'xlrd' if ext == 'xls' else 'openpyxl'
+        df = pd.read_excel(arquivo.stream, engine=engine)
+    except Exception as e:
+        msg = f'Falha ao ler Excel: {e}'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify(error=msg), 400
+        flash(msg, 'danger')
+        return redirect(url_for('entrada_nf.entradas_nf'))
+
+    # Normaliza cabeçalhos
+    orig_cols = list(df.columns)
+    normalized = {_normalize_colname(c): c for c in orig_cols}
+
+    # Mapeamento esperado
+    expected_map = {
+        'data'                 : ['data'],
+        'nf'                   : ['nf', 'nota', 'nota fiscal'],
+        'fornecedor'           : ['fornecedor', 'empresa'],
+        'produto'              : ['produto'],
+        'material1'            : ['material1','material_1','mat1'],
+        'material2'            : ['material2','material_2','mat2'],
+        'material3'            : ['material3','material_3','mat3'],
+        'material4'            : ['material4','material_4','mat4'],
+        'material5'            : ['material5','material_5','mat5'],
+        'custoempresa'         : ['custoempresa','custo_empresa','custo'],
+        'ipi'                  : ['ipi'],
+        'valorintegral'        : ['valorintegral','valor_integral','valor total'],
+        'valorunitario1'       : ['valorunitario1','valor_unitario_1'],
+        'valorunitario2'       : ['valorunitario2','valor_unitario_2'],
+        'valorunitario3'       : ['valorunitario3','valor_unitario_3'],
+        'valorunitario4'       : ['valorunitario4','valor_unitario_4'],
+        'valorunitario5'       : ['valorunitario5','valor_unitario_5'],
+        'duplicata1'           : ['duplicata1','duplicata_1'],
+        'duplicata2'           : ['duplicata2','duplicata_2'],
+        'duplicata3'           : ['duplicata3','duplicata_3'],
+        'duplicata4'           : ['duplicata4','duplicata_4'],
+        'duplicata5'           : ['duplicata5','duplicata_5'],
+        'duplicata6'           : ['duplicata6','duplicata_6'],
+        'valorunitarioenergia' : ['valorunitarioenergia','valor_unitario_energia','valor unitário energia','energia'],
+        'valormaoobra'         : ['valormaoobra','valor_mao_obra_tm_metallica','valor mão de obra tm/metallica','mao de obra','mão obra'],
+        'pesoliquido'          : ['pesoliquido','peso_liquido','peso líquido'],
+        'pesointegral'         : ['pesointegral','peso_integral','peso integral']
+    }
+
+    # Resolve colunas
+    resolved = {}
+    for key, aliases in expected_map.items():
+        found = None
+        for a in aliases:
+            na = _normalize_colname(a)
+            if na in normalized:
+                found = normalized[na]
+                break
+        resolved[key] = found
+
+    obrigatorias = ['data','nf','fornecedor','produto']
+    faltando = [k for k in obrigatorias if not resolved.get(k)]
+    if faltando:
+        msg = f'Colunas obrigatórias faltando no Excel: {faltando}. Cabeçalhos detectados: {orig_cols}'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify(error=msg), 400
+        flash(msg, 'danger')
+        return redirect(url_for('entrada_nf.entradas_nf'))
+
+    # Datas
+    try:
+        df['_data_parsed'] = pd.to_datetime(df[resolved['data']], dayfirst=True, errors='coerce')
+    except Exception:
+        df['_data_parsed'] = pd.to_datetime(df[resolved['data']].astype(str), dayfirst=True, errors='coerce')
+
+    # Números
+    for num_key in ['custoempresa','ipi','valorintegral',
+                    'valorunitario1','valorunitario2','valorunitario3','valorunitario4','valorunitario5',
+                    'duplicata1','duplicata2','duplicata3','duplicata4','duplicata5','duplicata6',
+                    'valorunitarioenergia','valormaoobra','pesoliquido','pesointegral']:
+        colname = resolved.get(num_key)
+        if colname:
+            df['_'+num_key] = df[colname].apply(_to_float_safe)
+        else:
+            df['_'+num_key] = None
+
+    # Textos
+    for txt_key in ['nf','fornecedor','produto','material1','material2','material3','material4','material5']:
+        colname = resolved.get(txt_key)
+        if colname:
+            df['_'+txt_key] = df[colname].apply(_to_str_safe)
+        else:
+            df['_'+txt_key] = None
+
+    # Colunas do banco
+    db_columns = [
+        'data','nf','fornecedor','produto',
+        'material_1','material_2','material_3','material_4','material_5',
+        'custo_empresa','ipi','valor_integral',
+        'valor_unitario_1','valor_unitario_2','valor_unitario_3','valor_unitario_4','valor_unitario_5',
+        'duplicata_1','duplicata_2','duplicata_3','duplicata_4','duplicata_5','duplicata_6',
+        'valor_unitario_energia','valor_mao_obra_tm_metallica','peso_liquido','peso_integral'
+    ]
+
+    rows, errors = [], []
+    for idx, r in df.iterrows():
+        try:
+            pesol = r['_pesoliquido']
+            if pesol is None or pd.isna(pesol):
+                pesol = 0.0
+
+            tup = (
+                (r['_data_parsed'].to_pydatetime() if (hasattr(r['_data_parsed'],'to_pydatetime')) else (r['_data_parsed'] if not pd.isna(r['_data_parsed']) else None)),
+                r['_nf'],
+                r['_fornecedor'],
+                r['_produto'],
+                r['_material1'],
+                r['_material2'],
+                r['_material3'],
+                r['_material4'],
+                r['_material5'],
+                r['_custoempresa'],
+                r['_ipi'],
+                r['_valorintegral'],
+                r['_valorunitario1'],
+                r['_valorunitario2'],
+                r['_valorunitario3'],
+                r['_valorunitario4'],
+                r['_valorunitario5'],
+                r['_duplicata1'],
+                r['_duplicata2'],
+                r['_duplicata3'],
+                r['_duplicata4'],
+                r['_duplicata5'],
+                r['_duplicata6'],
+                r['_valorunitarioenergia'],
+                r['_valormaoobra'],
+                pesol,
+                r['_pesointegral']
+            )
+            rows.append(tup)
+        except Exception as e:
+            errors.append(f'linha {idx+1}: {e}')
+
+    # Inserção no banco (anti-duplicação de NF)
+    inserted = 0
+    if rows:
+        conn = conectar()
+        cur = conn.cursor()
+        try:
+            # busca NFs já existentes
+            cur.execute("SELECT nf FROM entrada_nf")
+            nfs_existentes = {row[0] for row in cur.fetchall() if row[0]}
+
+            # filtra apenas os que não estão no banco
+            rows_filtradas = [r for r in rows if r[1] not in nfs_existentes]
+
+            if rows_filtradas:
+                cols_sql = ','.join(db_columns)
+                sql = f"INSERT INTO entrada_nf ({cols_sql}) VALUES %s"
+                execute_values(cur, sql, rows_filtradas)
+                inserted = cur.rowcount if cur.rowcount is not None else len(rows_filtradas)
+
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            msg = f'Erro ao inserir no banco: {e}'
+            try:
+                cur.close(); conn.close()
+            except: pass
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return jsonify(error=msg), 500
+            flash(msg, 'danger')
+            return redirect(url_for('entrada_nf.entradas_nf'))
+        finally:
+            try:
+                cur.close(); conn.close()
+            except: pass
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify(inserted=inserted, failed=len(errors), errors=errors), 200
+
+    flash(f'Importação concluída. Inseridos: {inserted}. Falhas: {len(errors)}', 'success')
+    return redirect(url_for('entrada_nf.entradas_nf'))

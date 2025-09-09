@@ -1,22 +1,26 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // garante que não quebre se não existir
+  // -------------------- ESTADO GLOBAL --------------------
+  window.selectedIds = window.selectedIds || new Set();
+  const selectedIds = window.selectedIds;
+  window._entradaSelectedAllPages = window._entradaSelectedAllPages || false;
+  window.currentEntradaPage = window.currentEntradaPage || 1;
+
+  // evita quebra se variável não definida externamente
   window.materiaisOptions = window.materiaisOptions || [];
 
   console.log('Materiais disponíveis:', window.materiaisOptions);
 
   // --- Persistência de colunas ocultas ---
   const STORAGE_KEY = 'entrada_nf_colunas_ocultas';
-
   function loadHiddenCols() {
     const data = localStorage.getItem(STORAGE_KEY);
     return data ? JSON.parse(data) : [];
   }
-
   function saveHiddenCols(hiddenCols) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(hiddenCols));
   }
 
-  // Formata data string DD/MM/YYYY (quando já completa)
+  // -------------------- UTILIDADES DE DATA / NÚMERO --------------------
   function formatDate(value) {
     if (!value) return '';
     const parts = value.split('/');
@@ -33,34 +37,26 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!display) return '';
     const m = String(display).trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-    // se já está em ISO, retorna
     if (/^\d{4}-\d{2}-\d{2}$/.test(display)) return display;
     return '';
   }
 
-  // converte "YYYY-MM-DD" -> "dd/mm/YYYY" (ou retorna string original se não casar)
   function isoToDisplay(iso) {
     if (!iso) return '';
     const m = String(iso).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (m) return `${m[3]}/${m[2]}/${m[1]}`;
-    // se já está em display, retorna
     if (/^\d{2}\/\d{2}\/\d{4}$/.test(iso)) return iso;
     return iso;
   }
 
-  // Formata número pt-BR com casas decimais
   function formatNumberBR(v, casas = 2) {
     if (v === null || v === undefined || String(v).trim() === '') return '';
-
-    // Se já for number, formata diretamente (evita remover o ponto decimal)
     if (typeof v === 'number') {
       return new Intl.NumberFormat('pt-BR', {
         minimumFractionDigits: casas,
         maximumFractionDigits: casas
       }).format(v);
     }
-
-    // se for string: normaliza "1.234,56" / "1234,56" / "1234.56" -> Number corretamente
     const cleaned = String(v).replace(/\./g, '').replace(',', '.');
     const num = Number(cleaned);
     if (Number.isNaN(num)) return String(v);
@@ -70,46 +66,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }).format(num);
   }
 
-  // Normaliza string numérica para Number JS (ponto decimal)
   function normalizeNumberString(raw) {
     if (raw === null || raw === undefined) return '';
     let s = String(raw).trim();
     if (s === '') return '';
-
-    // remove espaços e % e quaisquer letras/símbolos exceto . , -
-    const hasPercent = s.indexOf('%') !== -1;
     s = s.replace(/\s/g, '').replace('%','');
     s = s.replace(/[^0-9\.,-]/g, '');
-
     const hasComma = s.indexOf(',') !== -1;
     const hasDot = s.indexOf('.') !== -1;
-
-    if (hasComma && !hasDot) {
-      // "1.234,56" (no dot) -> "1234.56"
-      return s.replace(',', '.');
-    }
-
+    if (hasComma && !hasDot) return s.replace(',', '.');
     if (hasDot && hasComma) {
-      // "1.234,56" (both present): parts by comma
       const parts = s.split(',');
       const integerPart = parts[0].replace(/\./g, '');
       const decimalPart = parts[1] || '';
       return integerPart + '.' + decimalPart;
     }
-
-    // nenhum separador ou só ponto
     return s;
   }
 
-  // Retorna número de casas para cada coluna (personalize conforme necessário)
   function casasDecimais(col) {
     if (!col) return 2;
-    if (col.startsWith('peso')) return 3; // por exemplo: pesos com 3 casas
-    // adicionar regras específicas se precisar
+    if (col.startsWith('peso')) return 3;
     return 2;
   }
 
-  // Verifica se coluna é numérica
   function isNumericCol(col) {
     if (!col) return false;
     return (
@@ -124,16 +104,13 @@ document.addEventListener('DOMContentLoaded', () => {
     );
   }
 
-  // Inicializa campos numéricos marcando dataset.col
-  function initMainNumericInputs() {
-    const inputs = Array.from(document.querySelectorAll('input[name]'));
+  // substituir a função existente por esta versão com scope
+  function initMainNumericInputs(scope = document) {
+    const inputs = Array.from(scope.querySelectorAll('input[name]'));
     inputs.forEach(input => {
-      // se já tiver dataset.col, mantém
       if (input.dataset && input.dataset.col) return;
-
       const name = input.getAttribute('name') || '';
       if (!name) return;
-
       if (isNumericCol(name)) {
         try {
           input.dataset.col = name;
@@ -148,101 +125,63 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  initMainNumericInputs();
-
-  // ---------- MÁSCARA / HANDLERS DE DATA (attach diretamente aos inputs de data) ----------
-  function attachDateMask() {
-    const els = Array.from(document.querySelectorAll('input[name="data"]:not([type="date"]), input[data-col="data"]:not([type="date"])'));
+  // -------------------- MÁSCARA DE DATA --------------------
+  function attachDateMask(scope = document) {
+    const els = Array.from(scope.querySelectorAll('input[name="data"]:not([type="date"]), input[data-col="data"]:not([type="date"])'));
     els.forEach(el => {
-      // evita múltiplas ligações
       if (el.__dateMaskAttached) return;
       el.__dateMaskAttached = true;
-
-      // Se o input estiver com type="date" nativo do browser, troca para text
-      // Isso evita que o browser "corrija" o valor enquanto usamos a máscara dd/mm/yyyy
       try {
         if (el.type === 'date') {
           el.dataset.originalType = 'date';
           el.type = 'text';
         }
-      } catch (err) {
-        // alguns navegadores / situações podem lançar erro ao alterar type — ignore
-        console.warn('Não foi possível alterar type para text (input data).', err);
-      }
-
-      // limita tamanho e facilita input em mobile
+      } catch (err) { console.warn('Não foi possível alterar type para text (input data).', err); }
       el.setAttribute('maxlength', '10');
       el.setAttribute('inputmode', 'numeric');
 
-      // permite apenas dígitos (e teclas de controle) no keydown
       el.addEventListener('keydown', (ev) => {
-        if (ev.ctrlKey || ev.metaKey || ev.altKey) return; // permite atalhos
+        if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
         const allowed = ['Backspace','Tab','ArrowLeft','ArrowRight','Delete','Home','End'];
         if (allowed.includes(ev.key)) return;
-        if (!/^\d$/.test(ev.key)) {
-          ev.preventDefault();
-        }
+        if (!/^\d$/.test(ev.key)) ev.preventDefault();
       });
 
-      // input: reconstroi formatação a partir só dos dígitos (preserva dd/mm ao digitar o ano)
       el.addEventListener('input', (ev) => {
         const input = ev.target;
-
-        // mantém apenas os números
         const rawDigits = input.value.replace(/\D/g, '').slice(0, 8);
-
         let day = rawDigits.slice(0, 2);
         let month = rawDigits.slice(2, 4);
         let year = rawDigits.slice(4);
-
         let value = '';
         if (day) value = day;
         if (month) value += '/' + month;
         if (year) value += '/' + year;
-
         input.value = value;
-
-        // mantém cursor no final
         try { input.setSelectionRange(input.value.length, input.value.length); } catch (err) {}
       });
 
-      // blur: tenta finalizar para dd/mm/yyyy (quando possível)
       el.addEventListener('blur', (ev) => {
         const input = ev.target;
         const digits = (input.value || '').replace(/\D/g, '');
-        if (digits.length === 8) {
-          input.value = digits.slice(0,2) + '/' + digits.slice(2,4) + '/' + digits.slice(4,8);
-        } else if (digits.length === 6) {
-          // ddmmaa -> dd/mm/20aa
-          input.value = digits.slice(0,2) + '/' + digits.slice(2,4) + '/20' + digits.slice(4,6);
-        } else if (digits.length === 4) {
-          input.value = digits.slice(0,2) + '/' + digits.slice(2,4);
-        } else {
-          // mantém parcial - não zera
-        }
+        if (digits.length === 8) input.value = digits.slice(0,2) + '/' + digits.slice(2,4) + '/' + digits.slice(4,8);
+        else if (digits.length === 6) input.value = digits.slice(0,2) + '/' + digits.slice(2,4) + '/20' + digits.slice(4,6);
+        else if (digits.length === 4) input.value = digits.slice(0,2) + '/' + digits.slice(2,4);
       });
     });
   }
-
-  // chama inicialmente (se inputs já estiverem no DOM)
   attachDateMask();
 
-  // Se sua UI cria inputs dinamicamente, você pode re-chamar attachDateMask() depois que adicionar os inputs.
-  // ---------- HANDLER GLOBAL PARA NÚMEROS (continua como antes, mas só para colunas numéricas) ----------
+  // -------------------- HANDLERS NUMÉRICOS GLOBAIS --------------------
   document.addEventListener('input', (e) => {
     const input = e.target;
     if (!input || input.tagName !== 'INPUT') return;
-
     const col = input.dataset.col || input.name || null;
     if (!col) return;
-
-    // Só processa campos numéricos — a data está sendo tratada por attachDateMask()
     if (!isNumericCol(col)) return;
-
     handleNumericLiveInput(input);
   });
 
-  // Focusin para numéricos: remover pontos de milhar para editar
   document.addEventListener('focusin', (e) => {
     const t = e.target;
     if (!t || t.tagName !== 'INPUT') return;
@@ -255,7 +194,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Focusout global para numéricos: aplicar formatação final
   document.addEventListener('focusout', (e) => {
     const t = e.target;
     if (!t || t.tagName !== 'INPUT') return;
@@ -265,18 +203,10 @@ document.addEventListener('DOMContentLoaded', () => {
     handleNumericFinalize(t);
   });
 
-  // ---------- FUNÇÕES AUXILIARES PARA NÚMEROS ----------
   function handleNumericLiveInput(input) {
-    // usa casas específicas por coluna (peso -> 3, outros -> 2)
     const decimals = casasDecimais(input.dataset.col || input.name || '') || 2;
-    // pega somente dígitos
     let digits = (String(input.value || '').match(/\d/g) || []).join('');
-
-    if (!digits) {
-      input.value = '';
-      return;
-    }
-
+    if (!digits) { input.value = ''; return; }
     let intRaw, decRaw;
     if (digits.length <= decimals) {
       intRaw = '0';
@@ -285,27 +215,15 @@ document.addEventListener('DOMContentLoaded', () => {
       intRaw = digits.slice(0, -decimals);
       decRaw = digits.slice(-decimals);
     }
-
-    const intFormatted = (intRaw.replace(/^0+(?=\d)/, '') || '0')
-      .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-
+    const intFormatted = (intRaw.replace(/^0+(?=\d)/, '') || '0').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     input.value = `${intFormatted},${decRaw}`;
-
     try { input.setSelectionRange(input.value.length, input.value.length); } catch (err) {}
   }
 
   function handleNumericFinalize(input) {
     let val = String(input.value || '').trim();
-
-    if (val === '') {
-      input.value = '';
-      return;
-    }
-
+    if (val === '') { input.value = ''; return; }
     const decimals = casasDecimais(input.dataset.col || input.name);
-
-    // Se já está no formato pt-BR (tem vírgula e não tem pontos),
-    // re-formatamos garantindo o número de casas correto.
     if (val.indexOf(',') !== -1 && val.indexOf('.') === -1) {
       const cleaned = val.replace(/\./g, '').replace(',', '.');
       const jsnum = Number(cleaned);
@@ -313,8 +231,6 @@ document.addEventListener('DOMContentLoaded', () => {
       input.value = formatNumberBR(jsnum, decimals);
       return;
     }
-
-    // Detecta se tem vírgula E ponto (ex: "1.234,56")
     if (val.indexOf(',') !== -1) {
       const cleaned = val.replace(/\./g, '').replace(',', '.');
       const jsnum = Number(cleaned);
@@ -322,9 +238,6 @@ document.addEventListener('DOMContentLoaded', () => {
       input.value = formatNumberBR(jsnum, decimals);
       return;
     }
-
-    // Se contém ponto (possível separador de milhar, ou formato "1234.56"),
-    // trata como número e formata.
     if (val.indexOf('.') !== -1) {
       const cleaned = val.replace(/\./g, '');
       const jsnum = Number(cleaned);
@@ -332,15 +245,8 @@ document.addEventListener('DOMContentLoaded', () => {
       input.value = formatNumberBR(jsnum, decimals);
       return;
     }
-
-    // Caso contenha apenas números -> interpreta como centavos (ou como int
-    // sem separador decimal), aplicando as casas esperadas.
     const cleanedOnlyDigits = val.replace(/\D/g, '');
-    if (cleanedOnlyDigits.length === 0) {
-      input.value = '';
-      return;
-    }
-
+    if (cleanedOnlyDigits.length === 0) { input.value = ''; return; }
     let intRaw, decRaw;
     if (cleanedOnlyDigits.length <= decimals) {
       intRaw = '0';
@@ -349,50 +255,34 @@ document.addEventListener('DOMContentLoaded', () => {
       intRaw = cleanedOnlyDigits.slice(0, -decimals);
       decRaw = cleanedOnlyDigits.slice(-decimals);
     }
-
-    const intFormatted = (intRaw.replace(/^0+(?=\d)/, '') || '0')
-      .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-
+    const intFormatted = (intRaw.replace(/^0+(?=\d)/, '') || '0').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     input.value = `${intFormatted},${decRaw}`;
   }
 
-  // Expor utilidades (opcional) para depuração
+  // utilitários expostos para debug
   window.__entradaNF__ = {
-    isNumericCol,
-    casasDecimais,
-    initMainNumericInputs,
-    formatDate,
-    formatNumberBR,
-    attachDateMask, // caso precise reaplicar para inputs dinâmicos
+    isNumericCol, casasDecimais, initMainNumericInputs, formatDate, formatNumberBR, attachDateMask
   };
 
-  // Toggle submenu NF
+  // -------------------- MENU / MODAL --------------------
   const nfItem = document.getElementById('nfItem');
   const nfSubmenu = document.getElementById('nfSubmenu');
-  if (nfItem && nfSubmenu) {
-    nfItem.addEventListener('click', () => nfSubmenu.classList.toggle('hidden'));
-  }
+  if (nfItem && nfSubmenu) nfItem.addEventListener('click', () => nfSubmenu.classList.toggle('hidden'));
 
-  // Modal Entradas
   const btnVerEntradas = document.getElementById('btnVerEntradas');
   const modalEntradas  = document.getElementById('modal-entradas');
-  const modalContent   = modalEntradas ? modalEntradas.querySelector('.modal-content') : null;
+  let modalContent   = modalEntradas ? modalEntradas.querySelector('.modal-content') : null;
 
   if (btnVerEntradas) btnVerEntradas.addEventListener('click', () => loadPage(1));
   if (modalEntradas) {
-    // fechar clicando fora do conteúdo
     modalEntradas.addEventListener('click', e => {
       if (e.target === modalEntradas) {
         modalEntradas.classList.remove('show');
         modalEntradas.setAttribute('aria-hidden', 'true');
       }
     });
-
-    // fechar com tecla ESC
     document.addEventListener('keydown', (e) => {
-      // alguns navegadores usam 'Esc' historicamente, aceitamos ambos
       if (e.key === 'Escape' || e.key === 'Esc') {
-        // somente fecha se o modal estiver visível
         if (modalEntradas.classList && modalEntradas.classList.contains('show')) {
           modalEntradas.classList.remove('show');
           modalEntradas.setAttribute('aria-hidden', 'true');
@@ -401,57 +291,44 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // --- Funções de exclusão (single + bulk) ---
+  // -------------------- CSRF HELPER --------------------
   function getCsrfToken() {
-    const meta = document.querySelector('meta[name="csrf-token"]');
+    const meta = document.querySelector('meta[name="csrf-token"], meta[name="csrf-token"]');
     return meta ? meta.getAttribute('content') : null;
   }
 
+  // -------------------- REQUISIÇÃO DE EXCLUSÃO (por IDs) --------------------
   async function doDeleteRequest(ids) {
     if (!Array.isArray(ids) || ids.length === 0) throw new Error('Nenhum id fornecido');
-
     const url = '/entrada_nf/excluir';
     const headers = { 'Content-Type': 'application/json' };
     const csrf = getCsrfToken();
-    if (csrf) headers['X-CSRFToken'] = csrf; // ajuste se seu backend usa outro nome
-
+    if (csrf) headers['X-CSRFToken'] = csrf;
     const resp = await fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify({ ids }),
-      credentials: 'same-origin' // garante envio de cookies de sessão se necessário
+      credentials: 'same-origin'
     });
-
-    // tenta parse seguro do body
     let data = null;
     try { data = await resp.json(); } catch (e) { data = null; }
-
     if (!resp.ok) {
       const msg = (data && data.msg) ? data.msg : `Erro HTTP ${resp.status}`;
       throw new Error(msg);
     }
-
-    // Verifica semântica do JSON (se o backend usar {status:'ok'} por exemplo)
-    if (data && (data.status === 'error' || data.status === 'fail')) {
-      throw new Error(data.msg || 'Erro no servidor ao excluir.');
-    }
-
-    return data; // sucesso (pode conter removed, etc)
+    if (data && (data.status === 'error' || data.status === 'fail')) throw new Error(data.msg || 'Erro no servidor ao excluir.');
+    return data;
   }
 
+  // -------------------- EXCLUIR SINGLE / BULK --------------------
   async function confirmAndDeleteSingle(id, row) {
     if (!confirm('Confirma exclusão desta entrada? Esta ação é irreversível.')) return;
     try {
-      // desabilita botão da linha para evitar clique duplo
       const btn = row ? row.querySelector('.btn-excluir') : null;
       if (btn) { btn.disabled = true; }
-
       const data = await doDeleteRequest([id]);
-
-      // se backend retornar removed ou status, você pode checar aqui:
-      // if (data && data.removed === 0) throw new Error('Nenhuma linha removida.');
-
       if (row && row.parentNode) row.parentNode.removeChild(row);
+      selectedIds.delete(String(id));
       refreshBulkStateAndSelectAll();
       alert('Excluído com sucesso.');
     } catch (err) {
@@ -467,25 +344,62 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!ids || !ids.length) return;
     if (!confirm(`Confirma exclusão de ${ids.length} entrada(s)? Esta ação é irreversível.`)) return;
 
-    // pega botão bulk para feedback
-    const bulkBtn = modalContent.querySelector('#bulkDeleteEntradasBtn');
+    const bulkBtn = modalContent ? modalContent.querySelector('#bulkDeleteEntradasBtn') : null;
     try {
       if (bulkBtn) { bulkBtn.disabled = true; bulkBtn.textContent = `Excluindo...`; }
 
-      const data = await doDeleteRequest(ids);
+      const data = await doDeleteRequest(ids); // mantém sua função existente
 
-      // se backend informar quantos foram removidos, pode usar:
-      // const removed = data && data.removed ? data.removed : ids.length;
+      // Interpreta resposta do backend:
+      // - prioridade para removed_ids (array)
+      // - fallback para removed (número): se igual ao solicitado, assumimos sucesso total
+      // - se backend não informar nada, mantemos comportamento conservador (assumir que todos removeram)
+      let removedIds = [];
+      if (data && Array.isArray(data.removed_ids)) {
+        removedIds = data.removed_ids.map(String);
+      } else if (data && typeof data.removed === 'number') {
+        if (data.removed === ids.length) {
+          removedIds = ids.map(String);
+        } else {
+          // servidor diz que removeu X mas não deu a lista; optamos por não remover nada automaticamente,
+          // para evitar inconsistência — em vez disso, sugerimos recarregar a página.
+          // (Se preferir, aqui podemos assumir que os primeiros N foram removidos — mas isso é arriscado.)
+          alert(`Servidor reportou ${data.removed} remoção(ões), mas não forneceu os IDs removidos. Por segurança, a listagem será recarregada para sincronizar.`);
+          try { loadPage(window.currentEntradaPage || 1); } catch (e) {}
+          return;
+        }
+      } else {
+        // sem informação útil: para manter compatibilidade você pode:
+        // a) assumir sucesso total (comportamento antigo) — arriscado; ou
+        // b) recarregar a página para sincronizar com servidor — mais seguro.
+        // Vou escolher a opção segura: recarregar.
+        alert('Resposta do servidor sem detalhes de quais IDs foram removidos. A listagem será recarregada para sincronização.');
+        try { loadPage(window.currentEntradaPage || 1); } catch (e) {}
+        return;
+      }
 
-      ids.forEach(id => {
-        const cb = modalContent.querySelector(`.selectEntrada[data-id="${CSS.escape(String(id))}"]`);
+      // remove do DOM apenas os IDs confirmados como removidos
+      removedIds.forEach(id => {
+        const cb = modalContent ? modalContent.querySelector(`.selectEntrada[data-id="${CSS.escape(String(id))}"]`) : null;
         if (cb) {
           const row = cb.closest('tr');
           if (row && row.parentNode) row.parentNode.removeChild(row);
         }
+        selectedIds.delete(String(id));
       });
+
+      // Feedback ao usuário
+      const removedCount = removedIds.length;
+      const failedCount = ids.length - removedCount;
+      if (failedCount > 0) {
+        alert(`${removedCount} excluída(s). ${failedCount} não foram removidas (verifique logs/perm.)`);
+        // opcional: recarregar ou destacar failed ids
+        try { loadPage(window.currentEntradaPage || 1); } catch (e) {}
+      } else {
+        alert(`Excluídas ${removedCount} entrada(s).`);
+      }
+
       refreshBulkStateAndSelectAll();
-      alert(`Excluídas ${ids.length} entrada(s).`);
     } catch (err) {
       console.error('Erro ao excluir em massa:', err);
       alert('Falha ao excluir em massa: ' + (err.message || err));
@@ -494,444 +408,397 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // função que atualiza estado do botão de exclusão em massa
+  // -------------------- GATHER FILTERS FROM MODAL --------------------
+  function gatherFiltersFromModal() {
+    const filters = {};
+    if (!modalContent) return filters;
+
+    // 1) Inputs explicitly marked as filter
+    modalContent.querySelectorAll('[data-filter="true"]').forEach(el => {
+      const name = el.name || el.id || el.dataset.key;
+      if (!name) return;
+      let val = el.value === undefined ? '' : String(el.value).trim();
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) val = displayToIso(val);
+      filters[name] = val;
+    });
+
+    // 2) Common date inputs by name
+    const possibleDateNames = ['date_from', 'dateTo', 'date_to', 'data', 'data_from', 'data_to', 'data_entrada'];
+    possibleDateNames.forEach(n => {
+      const el = modalContent.querySelector(`[name="${n}"], #${n}`);
+      if (el) {
+        let v = (el.value || '').trim();
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) v = displayToIso(v);
+        filters[n] = v;
+      }
+    });
+
+    // 3) Fornecedor/id and generic text filters
+    const textNames = ['fornecedor', 'fornecedor_id', 'q', 'search', 'numero_nf'];
+    textNames.forEach(n => {
+      const el = modalContent.querySelector(`[name="${n}"], #${n}`);
+      if (el) filters[n] = (el.value || '').trim();
+    });
+
+    // 4) Fallback: inputs/selects inside .search-and-filter
+    const toolbar = modalContent.querySelector('.search-and-filter');
+    if (toolbar) {
+      toolbar.querySelectorAll('input, select').forEach(el => {
+        const name = el.name || el.id;
+        if (!name) return;
+        if (filters[name] !== undefined && filters[name] !== '') return;
+        let v = (el.value || '').trim();
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) v = displayToIso(v);
+        if (v !== '') filters[name] = v;
+      });
+    }
+
+    return filters;
+  }
+
+  // -------------------- DELETE ALL MATCHING (all_matching: true) --------------------
+  async function deleteAllMatching(searchTermRaw = '', extraFilters = {}) {
+    if (!confirm('Confirmar exclusão de TODAS as entradas correspondentes ao filtro? Esta ação é irreversível.')) return;
+
+    const url = '/entrada_nf/excluir';
+    const headers = { 'Content-Type': 'application/json' };
+    const csrf = getCsrfToken();
+    if (csrf) headers['X-CSRFToken'] = csrf;
+
+    // normalize before sending
+    const serverQ = normalizeForServer(String(searchTermRaw || ''));
+
+    const modalFilters = gatherFiltersFromModal();
+    const filters = Object.assign({}, modalFilters, extraFilters);
+
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify({ all_matching: true, q: serverQ || '', filters })
+      });
+      let data = null;
+      try { data = await resp.json(); } catch (e) { data = null; }
+      if (!resp.ok) {
+        const msg = (data && data.msg) ? data.msg : `Erro HTTP ${resp.status}`;
+        throw new Error(msg);
+      }
+      if (data && (data.status === 'error' || data.status === 'fail')) throw new Error(data.msg || 'Erro no servidor ao excluir.');
+
+      const removed = (data && typeof data.removed === 'number') ? data.removed : 0;
+      selectedIds.clear();
+      window._entradaSelectedAllPages = false;
+      alert(`Excluídas ${removed} entradas (por filtro).`);
+      const curPage = window.currentEntradaPage || 1;
+      try { loadPage(curPage); } catch (e) { console.warn('Não foi possível recarregar listagem automaticamente.', e); }
+      return data;
+    } catch (err) {
+      console.error('Erro em deleteAllMatching:', err);
+      alert('Falha ao excluir por filtro: ' + (err.message || err));
+      throw err;
+    }
+  }
+
+  // -------------------- SELECT ALL ACROSS PAGES (busca IDs) --------------------
+  async function selectAllAcrossPages() {
+    const rawSearch = (modalContent && modalContent.querySelector('#searchEntradaInput'))
+      ? (modalContent.querySelector('#searchEntradaInput').value || '')
+      : '';
+    const serverSearch = normalizeForServer(rawSearch);
+    const filters = gatherFiltersFromModal();
+
+    const url = '/entrada_nf/ids_all';
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: serverSearch, filters }),
+      credentials: 'same-origin'
+    });
+    if (!resp.ok) {
+      let txt = 'Erro ao buscar IDs';
+      try { const j = await resp.json(); if (j && j.msg) txt = j.msg; } catch(_) {}
+      throw new Error(txt);
+    }
+    const data = await resp.json();
+    if (!data || !Array.isArray(data.ids)) throw new Error('Resposta inválida do servidor');
+
+    data.ids.forEach(id => selectedIds.add(String(id)));
+    if (modalContent) {
+      modalContent.querySelectorAll('.selectEntrada').forEach(cb => { if (selectedIds.has(cb.dataset.id)) cb.checked = true; });
+    }
+    window._entradaSelectedAllPages = true;
+    refreshBulkStateAndSelectAll();
+    console.log(`Selecionadas ${data.ids.length} entradas (todas as páginas)`);
+    return data.ids.length;
+  }
+
+  // -------------------- BANNER (NO-OP: sem mensagem/link) --------------------
+  function showSelectAllBanner(pageCount) { /* no-op */ }
+  function removeSelectAllBanner() {
+    if (!modalContent) return;
+    const ex = modalContent.querySelector('#selectAllBanner');
+    if (ex && ex.parentNode) ex.parentNode.removeChild(ex);
+  }
+
+  // -------------------- REFRESH UI (botão bulk e checkbox cabeçalho) --------------------
   function refreshBulkStateAndSelectAll() {
     if (!modalContent) return;
-    const allCheckboxes = Array.from(modalContent.querySelectorAll('.selectEntrada'));
-    const checked = allCheckboxes.filter(cb => cb.checked);
-    let bulkBtn = modalContent.querySelector('#bulkDeleteEntradasBtn');
+    const bulkBtn = modalContent.querySelector('#bulkDeleteEntradasBtn');
     if (!bulkBtn) return;
-    if (checked.length > 0) {
+    const count = selectedIds.size;
+    if (count > 0) {
       bulkBtn.style.display = '';
-      bulkBtn.textContent = `Excluir (${checked.length})`;
+      if (window._entradaSelectedAllPages) bulkBtn.textContent = `Excluir (todas as páginas: ${count})`;
+      else bulkBtn.textContent = `Excluir (${count})`;
     } else {
       bulkBtn.style.display = 'none';
       bulkBtn.textContent = 'Excluir (0)';
     }
-
-    // se nenhum checkbox marcado, desmarca "selectAll"
     const selectAll = modalContent.querySelector('#selectAllEntradas');
-    if (selectAll) selectAll.checked = allCheckboxes.length > 0 && allCheckboxes.every(cb => cb.checked);
+    const pageCheckboxes = Array.from(modalContent.querySelectorAll('.selectEntrada'));
+    if (!selectAll) return;
+    if (pageCheckboxes.length === 0) {
+      selectAll.checked = false;
+      selectAll.indeterminate = false;
+      removeSelectAllBanner();
+      return;
+    }
+    const allChecked = pageCheckboxes.every(cb => selectedIds.has(cb.dataset.id));
+    const someChecked = pageCheckboxes.some(cb => selectedIds.has(cb.dataset.id));
+    selectAll.checked = allChecked;
+    selectAll.indeterminate = (!allChecked && someChecked);
   }
 
-  // Carrega página de entradas e injeta no modal
-  async function loadPage(page) {
+  // --- normalize / qparam helpers (substitua os anteriores) ---
+  function normalizeForServer(term) {
+    if (!term || typeof term !== 'string') return '';
+    const t = term.trim();
+    const m = t.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) {
+      // dd/mm/yyyy -> yyyy-mm-dd
+      return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    }
+    // se já estiver iso yyyy-mm-dd mantém
+    if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+    return '';
+  }
+
+  // Substituir buildSearchQParams atual por este (usa displayToIso que já existe no arquivo)
+  function buildSearchQParams(rawSearch) {
+    const raw = String(rawSearch || '').trim();
+    const iso = normalizeForServer(raw); // retorna yyyy-mm-dd ou ''
+    const parts = [];
+    if (iso) {
+      parts.push('q=' + encodeURIComponent(iso));
+      parts.push('q_raw=' + encodeURIComponent(raw));
+    } else {
+      if (raw !== '') parts.push('q=' + encodeURIComponent(raw));
+    }
+    return parts.length ? '&' + parts.join('&') : '';
+  }
+
+  // -------------------- LOAD PAGE (injeta HTML no modal) --------------------
+  async function loadPage(page, searchRaw = '') {
     try {
-      const resp = await fetch(`/entrada_nf/listar?page=${page}`);
+      window.currentEntradaPage = page;
+
+      // monta qparam (q = ISO se for data, q_raw = bruto)
+      const qparam = buildSearchQParams(searchRaw || '');
+
+      // DEBUG: mostra no console exatamente o que será enviado
+      try { console.debug('[entrada_nf] loadPage -> page:', page, 'searchRaw:', String(searchRaw||''), 'qparam:', qparam); } catch(e){}
+
+      const resp = await fetch(`/entrada_nf/listar?page=${page}${qparam}`);
       if (!resp.ok) throw new Error('Falha ao carregar página ' + page);
       const html = await resp.text();
 
+      if (!modalEntradas) throw new Error('modalEntradas não encontrado');
+      modalContent = modalEntradas.querySelector('.modal-content');
       if (!modalContent) throw new Error('modalContent não encontrado');
+
+      // injeta HTML recebido
       modalContent.innerHTML = html;
-      attachDateMask();
+
+      // reaplica seus inicializadores
+      try { initMainNumericInputs(modalContent); } catch(e) {}
+      // Restaura seleção global
+      modalContent.querySelectorAll('.selectEntrada').forEach(cb => {
+        if (selectedIds.has(cb.dataset.id)) cb.checked = true;
+        else cb.checked = false;
+      });
+      try { refreshBulkStateAndSelectAll(); } catch(e) {}
+
+      // --- search input: preserva EXATAMENTE o raw do usuário e adiciona debounce sem clonar nó ---
+      const searchInput = modalContent.querySelector('#searchEntradaInput');
+      if (searchInput) {
+        try {
+          // mostra o que o usuário digitou (raw)
+          searchInput.value = String(searchRaw || '');
+        } catch (e) { /* ignore */ }
+
+        // adiciona listener apenas uma vez por elemento (flag)
+        if (!searchInput._hasSearchListener) {
+          searchInput._hasSearchListener = true;
+          searchInput._searchDebounceTimer = null;
+          const SEARCH_DEBOUNCE_MS = 600; // debounce maior para evitar requisições parciais
+
+          searchInput.addEventListener('input', (ev) => {
+            const raw = ev.target.value; // texto bruto exatamente como digita
+            if (searchInput._searchDebounceTimer) clearTimeout(searchInput._searchDebounceTimer);
+            searchInput._searchDebounceTimer = setTimeout(() => {
+              // chama loadPage com o termo BRUTO; internamente mandamos ISO quando for data
+              loadPage(1, raw);
+            }, SEARCH_DEBOUNCE_MS);
+          });
+
+          // suporte ao Enter para busca imediata
+          searchInput.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') {
+              ev.preventDefault();
+              if (searchInput._searchDebounceTimer) { clearTimeout(searchInput._searchDebounceTimer); searchInput._searchDebounceTimer = null; }
+              loadPage(1, searchInput.value);
+            }
+          });
+        }
+
+        // foco e caret no final (se desejado)
+        try { searchInput.focus(); const pos = searchInput.value.length; searchInput.setSelectionRange(pos, pos); } catch (e) {}
+      }
+
+      // reaplica máscaras / botões / eventos
+      try { attachDateMask(modalContent); } catch(e) {}
       modalEntradas.classList.add('show');
+      try { injectBulkDeleteButton(); } catch(e) {}
+      try { attachModalEvents(); } catch(e) {}
 
-      // injeta o botão de exclusão em massa na search-and-filter (se não existir)
-      injectBulkDeleteButton();
+      if (typeof window.initEntradaImport === 'function') window.initEntradaImport();
 
-      // 1) Oculta colunas dinâmicas vazias (opcional)
-      // hideEmptyColumns();
-      // setupColumnToggle();
-
-      // 2) Vincula o fechar e a paginação
-      attachModalEvents();
     } catch (err) {
       console.error(err);
       alert('Erro ao carregar entradas.');
     }
   }
 
-  // Injeta botão de exclusão em massa no modal (na search-and-filter)
+  // -------------------- INJECT BULK DELETE BUTTON --------------------
   function injectBulkDeleteButton() {
     if (!modalContent) return;
     const toolbar = modalContent.querySelector('.search-and-filter');
     if (!toolbar) return;
-
     if (!toolbar.querySelector('#bulkDeleteEntradasBtn')) {
       const btn = document.createElement('button');
       btn.id = 'bulkDeleteEntradasBtn';
       btn.type = 'button';
       btn.className = 'btn btn-danger btn-sm';
       btn.style.marginLeft = '8px';
-      btn.style.display = 'none'; // aparece só quando tiver seleção
+      btn.style.display = 'none';
       btn.textContent = 'Excluir (0)';
       toolbar.appendChild(btn);
 
-      btn.addEventListener('click', () => {
-        const checked = Array.from(modalContent.querySelectorAll('.selectEntrada:checked'));
-        const ids = checked.map(cb => cb.dataset.id).filter(Boolean);
+      btn.addEventListener('click', async () => {
+        const ids = Array.from(selectedIds);
         if (ids.length === 0) return;
+        const curSearch = (modalContent.querySelector('#searchEntradaInput') || {}).value || '';
+        if (window._entradaSelectedAllPages) {
+          try { await deleteAllMatching(curSearch, {}); } catch (e) { console.error('Erro ao excluir todas por filtro:', e); }
+          return;
+        }
         confirmAndDeleteBulk(ids);
       });
     }
   }
 
-  // Vincula fechar e paginação
+  // -------------------- ATTACH MODAL EVENTS --------------------
   function attachModalEvents() {
     if (!modalContent) return;
 
     // fechar modal via “×”
     const btnClose = modalContent.querySelector('#fecharModalEntradaBtn');
-    if (btnClose) {
+    if (btnClose && !btnClose._hasClose) {
+      btnClose._hasClose = true;
       btnClose.addEventListener('click', () => modalEntradas.classList.remove('show'));
     }
 
-    // paginação
+    // paginação (botões com .page-btn)
     modalContent.querySelectorAll('.page-btn').forEach(btn => {
+      if (btn._hasPage) return;
+      btn._hasPage = true;
       btn.addEventListener('click', e => {
         e.preventDefault();
-        const p = parseInt(btn.dataset.page, 10);
-        loadPage(p);
+        const p = parseInt(btn.dataset.page, 10) || 1;
+        const curSearchRaw = (modalContent.querySelector('#searchEntradaInput') || {}).value || '';
+        loadPage(p, curSearchRaw);
       });
     });
 
-    // (Opcional) pesquisa
+    // botão de busca (caso exista)
     const searchBtn = modalContent.querySelector('#searchEntradaBtn');
     const searchInput = modalContent.querySelector('#searchEntradaInput');
-    if (searchBtn && searchInput) {
+    if (searchBtn && searchInput && !searchBtn._hasClick) {
+      searchBtn._hasClick = true;
       searchBtn.addEventListener('click', () => {
-        // Exemplo: loadPage(1, searchInput.value);
-        loadPage(1);
+        const termRaw = (searchInput.value || '');
+        loadPage(1, termRaw);
       });
     }
 
-    // ✅ Checkbox "Selecionar todos"
+    // checkbox do cabeçalho: marca/desmarca página atual e faz fetch de todos os ids quando marcar
     const selectAll = modalContent.querySelector('#selectAllEntradas');
-    if (selectAll) {
-      selectAll.addEventListener('change', e => {
+    if (selectAll && !selectAll._hasListener) {
+      selectAll._hasListener = true;
+      selectAll.addEventListener('change', async e => {
         const checked = e.target.checked;
-        modalContent.querySelectorAll('.selectEntrada').forEach(cb => {
-          cb.checked = checked;
+        const pageCheckboxes = Array.from(modalContent.querySelectorAll('.selectEntrada'));
+
+        if (!checked) {
+          pageCheckboxes.forEach(cb => { cb.checked = false; });
+          selectedIds.clear();
+          window._entradaSelectedAllPages = false;
+          refreshBulkStateAndSelectAll();
+          return;
+        }
+
+        // marcar visíveis
+        pageCheckboxes.forEach(cb => {
+          cb.checked = true;
+          selectedIds.add(String(cb.dataset.id));
         });
+        refreshBulkStateAndSelectAll();
+
+        // buscar todos ids com filtros
+        try {
+          await selectAllAcrossPages();
+          modalContent.querySelectorAll('.selectEntrada').forEach(cb => { if (selectedIds.has(cb.dataset.id)) cb.checked = true; });
+        } catch (err) {
+          console.error('Erro ao selecionar todas as páginas automaticamente:', err);
+          alert('Falha ao selecionar todas as páginas. Seleção limitada à página atual.');
+        }
         refreshBulkStateAndSelectAll();
       });
     }
 
-    // quando qualquer checkbox individual muda, atualiza estado do botão bulk
+    // checkboxes individuais
     modalContent.querySelectorAll('.selectEntrada').forEach(cb => {
       if (cb._hasSelectListener) return;
       cb._hasSelectListener = true;
-      cb.addEventListener('change', () => refreshBulkStateAndSelectAll());
-    });
-
-    // liga botões de excluir (linha)
-    modalContent.querySelectorAll('.btn-excluir').forEach(btn => {
-      if (btn._hasDeleteListener) return;
-      btn._hasDeleteListener = true;
-
-      btn.addEventListener('click', (e) => {
-        const id = btn.dataset.id;
-        const row = btn.closest('tr');
-        if (!id) return;
-        confirmAndDeleteSingle(id, row);
+      cb.addEventListener('change', () => {
+        const id = String(cb.dataset.id);
+        if (cb.checked) selectedIds.add(id);
+        else {
+          selectedIds.delete(id);
+          window._entradaSelectedAllPages = false;
+        }
+        refreshBulkStateAndSelectAll();
       });
     });
 
-    modalContent.querySelectorAll('.btn-editar').forEach(btn => {
-      if (btn._hasEditListener) return;
-      btn._hasEditListener = true;
-
-      btn.addEventListener('click', e => {
-        const row = btn.closest('tr');
-        const id = btn.dataset.id;
-        if (!row || row.classList.contains('editing')) return;
-
-        row.classList.add('editing');
-
-        // guarda clones dos childNodes originais de cada td[data-col]
-        const tds = Array.from(row.querySelectorAll('td[data-col]'));
-        tds.forEach(td => {
-          td.dataset.colName = td.dataset.col || '';
-          td.dataset.originalText = td.textContent.trim();
-          td._origChildNodes = Array.from(td.childNodes).map(n => n.cloneNode(true));
-        });
-
-        // transforma células (mas preserva checkbox/radio/select)
-        tds.forEach(td => {
-          const col = td.dataset.col;
-          if (!col) return;
-          if (col === 'select' || col === 'acoes') return;
-
-          if (td.querySelector('input[type="checkbox"], input[type="radio"], select')) {
-            td.dataset.skippedInput = '1';
-            return;
-          }
-
-          if (col === 'data') {
-            const iso = displayToIso(td.dataset.originalText || '') || '';
-            td.innerHTML = `<input type="date" data-col="data" value="${iso}" style="width:100%"/>`;
-            return;
-          }
-
-          if (isNumericCol(col)) {
-            const val = td.dataset.originalText || '';
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.dataset.col = col;
-            input.name = col;
-            input.value = val;
-            input.style.width = '100%';
-            input.setAttribute('inputmode', 'decimal');
-            td.innerHTML = '';
-            td.appendChild(input);
-            return;
-          }
-
-          const txtInput = document.createElement('input');
-          txtInput.type = 'text';
-          txtInput.name = col;
-          txtInput.dataset.col = col;
-          txtInput.value = td.dataset.originalText || '';
-          txtInput.style.width = '100%';
-          td.innerHTML = '';
-          td.appendChild(txtInput);
-        });
-
-        // troca botões de ação
-        const acoesTd = row.querySelector('.acoes');
-        if (!acoesTd) return;
-        acoesTd.innerHTML = `
-          <button class="btn-acao btn-salvar" data-id="${id}">💾</button>
-          <button class="btn-acao btn-cancelar">❌</button>
-        `;
-
-         // ========================= SALVAR =========================
-        const btnSalvar = acoesTd.querySelector('.btn-salvar');
-        if (btnSalvar && !btnSalvar._hasSaveListener) {
-          btnSalvar._hasSaveListener = true;
-
-          btnSalvar.addEventListener('click', async () => {
-            // coleta campos (mesma lógica de antes)
-            const allTds = Array.from(row.querySelectorAll('td[data-col]'));
-            const fields = {};
-
-            allTds.forEach(td => {
-              const col = td.dataset.col;
-              if (!col) return;
-              if (col === 'select' || col === 'acoes') return;
-
-              if (td.dataset.skippedInput === '1') {
-                const cb = td.querySelector('input[type="checkbox"]');
-                const rdChecked = td.querySelector('input[type="radio"]:checked');
-                const sel = td.querySelector('select');
-                if (cb) { fields[col] = cb.checked ? '1' : '0'; return; }
-                if (rdChecked) { fields[col] = rdChecked.value || ''; return; }
-                if (sel) { fields[col] = sel.value || ''; return; }
-                fields[col] = td.textContent.trim();
-                return;
-              }
-
-              const inp = td.querySelector('input, select, textarea');
-              if (inp) {
-                if (inp.type === 'date') { fields[col] = inp.value || ''; return; }
-
-                let val = inp.value.trim();
-                if (isNumericCol(col)) {
-                  let s = val.replace(/\s/g,'').replace('%','').replace('\u00A0','');
-                  if (s === '') { fields[col] = ''; return; }
-                  const hasComma = s.includes(',');
-                  const hasDot = s.includes('.');
-                  if (hasComma && !hasDot) s = s.replace(',', '.');
-                  else if (hasDot && hasComma) {
-                    const parts = s.split(',');
-                    const integerPart = parts[0].replace(/\./g,'');
-                    const decimalPart = parts[1] || '';
-                    s = integerPart + '.' + decimalPart;
-                  } else if ((s.match(/\./g) || []).length > 1) {
-                    s = s.replace(/\./g,'');
-                  }
-                  fields[col] = s;
-                  return;
-                }
-                fields[col] = val;
-                return;
-              }
-
-              const raw = td.textContent.trim();
-              if (col === 'data') {
-                const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-                fields[col] = m ? `${m[3]}-${m[2]}-${m[1]}` : raw;
-                return;
-              }
-              if (isNumericCol(col)) {
-                let s = raw.replace(/\s/g,'').replace('%','').replace('\u00A0','');
-                if (s === '') { fields[col] = ''; return; }
-                const hasComma = s.includes(',');
-                const hasDot = s.includes('.');
-                if (hasComma && !hasDot) s = s.replace(',', '.');
-                else if (hasDot && hasComma) {
-                  const parts = s.split(',');
-                  const integerPart = parts[0].replace(/\./g,'');
-                  const decimalPart = parts[1] || '';
-                  s = integerPart + '.' + decimalPart;
-                } else if ((s.match(/\./g) || []).length > 1) {
-                  s = s.replace(/\./g,'');
-                }
-                fields[col] = s;
-                return;
-              }
-              fields[col] = raw;
-            });
-
-            if (!Object.keys(fields).length) {
-              alert('Nenhuma coluna encontrada para salvar.');
-              return;
-            }
-
-            console.log('[editar] enviando fields =', fields);
-
-            // desabilita botão para evitar múltiplos envios
-            btnSalvar.disabled = true;
-            const originalBtnHtml = btnSalvar.innerHTML;
-
-            try {
-              const resp = await fetch(`/entrada_nf/editar/${encodeURIComponent(id)}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fields })
-              });
-
-              let data = null;
-              try {
-                data = await resp.json();
-              } catch (e) {
-                // fallback caso resposta não seja JSON
-                const text = await resp.text().catch(()=>null);
-                try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
-              }
-
-              if (!resp.ok) {
-                console.error('[editar] resposta de erro:', resp.status, data);
-                alert(data && data.msg ? data.msg : `Erro ao salvar (status ${resp.status})`);
-                return;
-              }
-
-              // usa 'updated' vindo do servidor quando disponível, senão usa o que enviamos
-              const updated = (data && data.updated) ? data.updated : fields;
-              console.log('[editar] updated recebido do servidor:', updated);
-
-              // aplica os valores atualizados na DOM (preferindo valores do servidor)
-              try {
-                Object.entries(updated).forEach(([col, rawVal]) => {
-                  const td = row.querySelector(`td[data-col="${col}"]`);
-                  if (!td) return;
-
-                  if (col === 'data') {
-                    td.textContent = isoToDisplay(rawVal || '');
-                    td.dataset.originalText = td.textContent.trim();
-                    return;
-                  }
-
-                  if (isNumericCol(col)) {
-                    let txt = '';
-                    if (rawVal !== '' && rawVal != null) {
-                      const num = Number(String(rawVal).replace(',', '.'));
-                      txt = Number.isNaN(num) ? String(rawVal) : formatNumberBR(num, casasDecimais(col));
-                      if (col === 'ipi') txt += '%';
-                    }
-                    td.textContent = txt;
-                    td.dataset.originalText = td.textContent.trim();
-                    return;
-                  }
-
-                  // texto simples / null
-                  td.textContent = rawVal == null ? '' : String(rawVal);
-                  td.dataset.originalText = td.textContent.trim();
-                });
-
-                // finaliza edição: restaura botões e estado
-                row.classList.remove('editing');
-                acoesTd.innerHTML = `
-                  <button class="btn-acao btn-editar" data-id="${id}">✏️</button>
-                  <button class="btn-acao btn-excluir" data-id="${id}">🗑️</button>
-                `;
-                attachModalEvents();
-              } catch (innerErr) {
-                console.error('Erro ao aplicar updated na DOM:', innerErr);
-                alert('Salvo no servidor, mas falha ao atualizar interface (veja console).');
-              }
-            } catch (err) {
-              console.error('Erro ao salvar edição:', err);
-              alert('Erro ao salvar (veja console).');
-            } finally {
-              // reabilita botão
-              try {
-                btnSalvar.disabled = false;
-                btnSalvar.innerHTML = originalBtnHtml;
-              } catch (e) {}
-            }
-          });
-        }
-
-        // ========================= CANCELAR =========================
-        const btnCancelar = acoesTd.querySelector('.btn-cancelar');
-        if (btnCancelar && !btnCancelar._hasCancelListener) {
-          btnCancelar._hasCancelListener = true;
-          btnCancelar.addEventListener('click', () => {
-            const allTds = Array.from(row.querySelectorAll('td[data-col]'));
-            allTds.forEach(td => {
-              if (td._origChildNodes && td._origChildNodes.length) {
-                td.innerHTML = '';
-                td._origChildNodes.forEach(n => td.appendChild(n.cloneNode(true)));
-                delete td._origChildNodes;
-              } else if (td.dataset.originalText !== undefined) {
-                td.textContent = td.dataset.originalText;
-                delete td.dataset.originalText;
-              }
-              delete td.dataset.skippedInput;
-            });
-
-            row.classList.remove('editing');
-            acoesTd.innerHTML = `
-              <button class="btn-acao btn-editar" data-id="${id}">✏️</button>
-              <button class="btn-acao btn-excluir" data-id="${id}">🗑️</button>
-            `;
-            attachModalEvents();
-          });
-        }
-      });
-    });
-
-    // 🔥 Listener do dropdown (uma vez)
-    if (!modalContent._hasDropdownListener) {
-      modalContent.addEventListener('click', e => {
-        if (e.target.closest('#colToggleInput')) {
-          modalContent.querySelector('#colToggleList')?.classList.toggle('show');
-        } else if (modalContent.querySelector('#colToggleList')?.classList.contains('show')) {
-          if (!e.target.closest('.dropdown-container-inline')) {
-            modalContent.querySelector('#colToggleList').classList.remove('show');
-          }
-        }
-      });
-      modalContent._hasDropdownListener = true;
+    // placeholder para import/init features (se existir)
+    if (typeof window.initEntradaImport !== 'function') {
+      window.initEntradaImport = function() {
+        // placeholder: se tiver lógica de import no seu arquivo original, coloque aqui
+        return;
+      };
     }
-  }
-
-  // Oculta colunas de Mat., VU e Dup sem dados
-  function hideEmptyColumns() {
-    if (!modalContent) return;
-    const table = modalContent.querySelector('table');
-    if (!table) return;
-
-    const headers = table.querySelectorAll('thead th');
-    headers.forEach((th, idx) => {
-      const text = th.textContent.trim();
-      if (/^Material\.?\s*\d+|^Valor Unitario\.?\s*\d+|^Duplicata\.?\s*\d+/i.test(text)) {
-        const colIndex = idx + 1;
-        const cells = Array.from(
-          table.querySelectorAll(`tbody td:nth-child(${colIndex})`)
-        );
-        const hasValue = cells.some(td => {
-          const v = td.textContent.trim();
-          return v !== '' && v !== '0' && v !== '0,00';
-        });
-        if (!hasValue) {
-          table.querySelectorAll(
-            `thead th:nth-child(${colIndex}), tbody td:nth-child(${colIndex})`
-          ).forEach(el => el.style.display = 'none');
-        }
-      }
-    });
   }
 
   // Preenche e vincula o dropdown de colunas dinâmicas
@@ -1476,5 +1343,189 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.style.userSelect = "auto";
       }
     });
+  })();
+
+  // --- EXPORTAÇÃO FILTRADA (Entrada NF) ---
+  // Comportamento: clique normal => EXCEL (CSV).
+  // Se clicar segurando Shift => PDF (se implementado no backend).
+  (function () {
+    function exportarEntrada(params) {
+      const qs = (params instanceof URLSearchParams)
+        ? params.toString()
+        : (new URLSearchParams(params)).toString();
+      window.location = `/entrada_nf/exportar_filtrado?${qs}`;
+    }
+
+    const btnExport = document.getElementById('btnExportEntrada');
+    if (btnExport) {
+      btnExport.addEventListener('click', (e) => {
+        let q = '';
+        try {
+          const modalSearch = document.querySelector('#modal-entradas #searchEntradaInput');
+          if (modalSearch && modalSearch.value) q = modalSearch.value.trim();
+        } catch (err) { q = ''; }
+
+        const params = new URLSearchParams();
+        if (q) params.append('q', q);
+
+        const tipo = e.shiftKey ? 'pdf' : 'excel';
+        params.append('tipo', tipo);
+
+        exportarEntrada(params);
+      });
+    }
+  })();
+
+
+  // --- Import Modal (Entrada NF) ---
+  // --- IMPORT (Entrada NF) - inicialização robusta por delegação ---
+  // Substitua o bloco antigo por este. Funciona mesmo com DOM injetado dinamicamente.
+  (function () {
+    console.debug('[entrada_nf] inicializando import (delegation)');
+
+    // helpers para mostrar / esconder modal (suporta style.display ou classe .show)
+    function showModal(modal) {
+      if (!modal) return;
+      if (modal.classList) modal.classList.add('show');
+      modal.style.display = 'block';
+    }
+    function hideModal(modal) {
+      if (!modal) return;
+      if (modal.classList) modal.classList.remove('show');
+      modal.style.display = 'none';
+    }
+
+    // trata submit do formulário (delegado)
+    async function handleFormSubmit(ev) {
+      const form = ev.target;
+      if (!form || form.id !== 'form-import-excel') return;
+      ev.preventDefault();
+
+      // elementos (podem ter sido adicionados dinamicamente)
+      const progressContainer = document.getElementById('progressContainer');
+      const progressBar = document.getElementById('progressBar');
+      const progressText = document.getElementById('progressText');
+      const importMessage = document.getElementById('importMessage');
+      const importMsgText = document.getElementById('importMsgText');
+
+      if (importMessage) { importMessage.style.display = 'none'; importMsgText.textContent = ''; }
+
+      const fileInput = form.querySelector('input[type=file][name=arquivo_excel]');
+      if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+        if (importMessage) { importMessage.style.display = 'block'; importMsgText.textContent = 'Selecione um arquivo antes de enviar.'; importMsgText.style.color = 'red'; }
+        return;
+      }
+
+      const file = fileInput.files[0];
+      const name = file.name || '';
+      const ext = name.split('.').pop().toLowerCase();
+      if (!['xls','xlsx'].includes(ext)) {
+        if (importMessage) { importMessage.style.display = 'block'; importMsgText.textContent = 'Formato inválido. Use .xls ou .xlsx'; importMsgText.style.color = 'red'; }
+        return;
+      }
+
+      const maxSizeMB = 20;
+      if (file.size > maxSizeMB * 1024 * 1024) {
+        if (importMessage) { importMessage.style.display = 'block'; importMsgText.textContent = `Arquivo muito grande. Máx ${maxSizeMB} MB.`; importMsgText.style.color = 'red'; }
+        return;
+      }
+
+      // monta XHR para acompanhar progresso
+      const formData = new FormData(form);
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', form.action, true);
+      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+      if (progressContainer) progressContainer.style.display = 'block';
+      if (progressBar) progressBar.style.width = '0%';
+      if (progressText) progressText.textContent = '0%';
+
+      xhr.upload.addEventListener('progress', e => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          if (progressBar) progressBar.style.width = percent + '%';
+          if (progressText) progressText.textContent = percent + '%';
+        }
+      });
+
+      xhr.onload = () => {
+        let json = null;
+        try { json = JSON.parse(xhr.responseText); } catch (err) { json = null; }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const msg = (json && typeof json.inserted !== 'undefined')
+            ? `Importação concluída. Inseridos: ${json.inserted||0}. Falhas: ${json.failed||0}.`
+            : 'Importação concluída.';
+          if (importMessage) { importMessage.style.display = 'block'; importMsgText.textContent = msg; importMsgText.style.color = 'green'; }
+          // tenta atualizar listagem sem fechar modal
+          try {
+            const modalSearchEl = document.querySelector('#modal-entradas #searchEntradaInput');
+            const q = modalSearchEl && modalSearchEl.value ? modalSearchEl.value.trim() : '';
+            if (typeof loadPage === 'function') loadPage(1, q);
+          } catch (err) { console.warn('[entrada_nf] erro ao recarregar listagem:', err); }
+        } else {
+          const errText = (json && json.error) ? json.error : (xhr.responseText || xhr.statusText);
+          if (importMessage) { importMessage.style.display = 'block'; importMsgText.textContent = 'Erro ao importar: ' + errText; importMsgText.style.color = 'red'; }
+        }
+        // limpa barra depois de curto tempo
+        setTimeout(() => {
+          if (progressContainer) progressContainer.style.display = 'none';
+          if (progressBar) progressBar.style.width = '0%';
+          if (progressText) progressText.textContent = '0%';
+        }, 800);
+      };
+
+      xhr.onerror = () => {
+        if (importMessage) { importMessage.style.display = 'block'; importMsgText.textContent = 'Falha na conexão ao enviar arquivo.'; importMsgText.style.color = 'red'; }
+        if (progressContainer) setTimeout(() => progressContainer.style.display = 'none', 800);
+      };
+
+      xhr.send(formData);
+    }
+
+    // delegação de clique: abre modal, fecha modal (bons para conteúdo dinâmico)
+    function globalClickHandler(e) {
+      const openBtn = e.target.closest('#btnImportEntrada');
+      if (openBtn) {
+        const modal = document.getElementById('modal-import-entrada');
+        showModal(modal);
+        return;
+      }
+
+      const closeBtn = e.target.closest('#importClose, #cancelImport');
+      if (closeBtn) {
+        const modal = document.getElementById('modal-import-entrada');
+        hideModal(modal);
+        return;
+      }
+
+      // clique fora do conteúdo do modal: verifica se é o próprio backdrop
+      const modalEl = document.getElementById('modal-import-entrada');
+      if (modalEl && e.target === modalEl) {
+        hideModal(modalEl);
+        return;
+      }
+    }
+
+    // Inicializa: adiciona listeners delegados (um só listener de click + submit)
+    function init() {
+      console.debug('[entrada_nf] attach delegated listeners');
+      document.removeEventListener('click', globalClickHandler);
+      document.addEventListener('click', globalClickHandler);
+
+      // submit delegada para suportar formulários injetados
+      document.removeEventListener('submit', handleFormSubmit);
+      document.addEventListener('submit', function (ev) {
+        if (ev.target && ev.target.id === 'form-import-excel') handleFormSubmit(ev);
+      }, true);
+    }
+
+    // aguarda DOM pronto (fallback com timeout)
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      init();
+    } else {
+      document.addEventListener('DOMContentLoaded', init);
+      setTimeout(init, 200); // fallback
+    }
+
   })();
 });

@@ -11,7 +11,14 @@
         <input type="text" id="searchEntradaInput" placeholder="🔍 Pesquisar NF, Fornecedor…" autocomplete="off" />
         <button type="button" id="searchEntradaBtn" class="btn btn-secondary">🔍</button>
       </div>
-      <button id="btnExportEntrada" class="btn btn-sm btn-secondary">Exportar</button>
+
+      <!-- botões de ação: Exportar / Importar -->
+      <div class="actions">
+        <button id="btnExportEntrada" class="btn btn-sm btn-secondary">Exportar</button>
+
+        <!-- Apenas o botão que abre o modal de import -->
+        <button id="btnImportEntrada" class="btn btn-sm btn-primary" type="button">Importar</button>
+      </div>
     </div>
 
     <div class="modal-body">
@@ -117,6 +124,44 @@
             {% endfor %}
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Modal de Importação Excel (Entrada NF) -->
+    <div id="modal-import-entrada" class="modal" style="display:none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Importar Excel — Entradas</h3>
+          <button id="importClose" class="close" type="button">&times;</button>
+        </div>
+
+        <form id="form-import-excel" action="/entrada_nf/importar_excel" method="post" enctype="multipart/form-data">
+          <div class="modal-body">
+            <p>Selecione o arquivo Excel (.xls ou .xlsx). Colunas esperadas: <strong>Data, NF, Fornecedor, Produto, Custo Empresa, IPI, Valor Integral</strong>.</p>
+
+            <div>
+              <label for="arquivo_excel">Arquivo Excel</label>
+              <input type="file" name="arquivo_excel" id="arquivo_excel"
+                    accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+            </div>
+
+            <div id="progressContainer" style="display:none; margin-top:10px;">
+              <div style="background:#eee; height:12px; width:100%; border-radius:6px; overflow:hidden;">
+                <div id="progressBar" style="width:0%; height:100%;"></div>
+              </div>
+              <div id="progressText" style="margin-top:6px;">0%</div>
+            </div>
+
+            <div id="importMessage" style="display:none; margin-top:10px;">
+              <div id="importMsgText"></div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" id="cancelImport" class="btn">Cancelar</button>
+            <button type="submit" class="btn btn-primary">Enviar</button>
+          </div>
+        </form>
       </div>
     </div>
 

@@ -321,6 +321,79 @@ html, body {
   padding: 8px 16px;
 }
 
+/* ===== Modal de Import (compacto e centralizado) ===== */
+#modal-import-entrada.modal {
+  /* mantém overlay e centralização (já presente em .modal) */
+  padding: 20px;      /* espaço nas laterais em mobile */
+  align-items: center;
+  justify-content: center;
+}
+
+#modal-import-entrada .modal-content {
+  position: relative !important;
+  width: 100%;
+  max-width: 520px;          /* largura máxima do modal (ajuste aqui: 400/480/520) */
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.28);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;          /* altura máxima relativa à viewport */
+}
+
+/* Header mais compacto */
+#modal-import-entrada .modal-header {
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+#modal-import-entrada .modal-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+/* Corpo com padding e scroll interno se necessário */
+#modal-import-entrada .modal-body {
+  padding: 12px 14px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 60px;
+}
+
+/* Footer compactado */
+#modal-import-entrada .modal-footer {
+  padding: 10px 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid #f3f3f3;
+  background: #fff;
+}
+
+/* Progress bar menor */
+#modal-import-entrada #progressContainer { margin-top: 10px; }
+#modal-import-entrada #progressBar { height: 8px; border-radius: 6px; }
+
+/* Botão fechar menor e posicionado */
+#modal-import-entrada .modal-header .close {
+  font-size: 1.1rem;
+  padding: 6px 8px;
+}
+
+/* MOBILE: ocupa a maior parte da largura mas ainda compacto */
+@media (max-width: 520px) {
+  #modal-import-entrada .modal-content {
+    max-width: 94%;
+    max-height: 86vh;
+    border-radius: 10px;
+  }
+  #modal-import-entrada .modal-header h3 { font-size: 1rem; }
+}
+
 /* ----- Search & Filter (abaixo do header) ----- */
 .search-and-filter {
   display: flex;

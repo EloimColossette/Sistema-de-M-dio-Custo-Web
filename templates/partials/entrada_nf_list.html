@@ -127,15 +127,17 @@
       </div>
     </div>
 
-    <!-- Modal de Importação Excel (Entrada NF) - APENAS UMA VEZ -->
+    <!-- Modal de Importação Excel (Entrada NF) -->
     <div id="modal-import-entrada" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalImportEntradasTitle" tabindex="-1" style="display:none;">
       <div class="modal-content">
+        
+        <!-- Cabeçalho -->
         <div class="modal-header">
           <h3 id="modalImportEntradasTitle">Importar Excel — Entradas</h3>
-          <!-- botão de fechar com id esperado pelo JS -->
           <button id="importClose" class="close" type="button" aria-label="Fechar import">&times;</button>
         </div>
 
+        <!-- Formulário -->
         <form id="form-import-excel" action="/entrada_nf/importar_excel" method="post" enctype="multipart/form-data">
           <div class="modal-body">
             <p>Selecione o arquivo Excel (.xls ou .xlsx).</p>
@@ -143,21 +145,25 @@
             <div>
               <label for="arquivo_excel">Arquivo Excel</label>
               <input type="file" name="arquivo_excel" id="arquivo_excel"
-                    accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                    accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    required>
             </div>
 
+            <!-- Barra de progresso CUSTOMIZADA -->
             <div id="progressContainer" style="display:none; margin-top:10px;">
               <div style="background:#eee; height:12px; width:100%; border-radius:6px; overflow:hidden;">
-                <div id="progressBar" style="width:0%; height:100%;"></div>
+                <div id="progressBar" style="width:0%; height:100%; background:#007bff; transition:width 0.3s;"></div>
               </div>
-              <div id="progressText" style="margin-top:6px;">0%</div>
+              <div id="progressText" style="margin-top:6px; font-size:12px; text-align:center; color:#444;">0%</div>
             </div>
 
+            <!-- Mensagem de retorno -->
             <div id="importMessage" style="display:none; margin-top:10px;">
               <div id="importMsgText"></div>
             </div>
           </div>
 
+          <!-- Rodapé com botões -->
           <div class="modal-footer" style="padding: 12px;">
             <button type="button" id="cancelImport" class="btn">Cancelar</button>
             <button type="submit" class="btn btn-primary">Enviar</button>

@@ -1432,14 +1432,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // elementos de UI (pode ser que o form esteja dentro do modal injetado)
-      const progressContainer = document.getElementById('progressContainer');
-      const progressBar = document.getElementById('progressBar');
-      const progressText = document.getElementById('progressText');
-      const importMessage = document.getElementById('importMessage');
-      const importMsgText = document.getElementById('importMsgText');
+      const progressContainer = form.querySelector('#progressContainer') || document.getElementById('progressContainer');
+      const progressBar = form.querySelector('#progressBar') || document.getElementById('progressBar');
+      const progressText = form.querySelector('#progressText') || document.getElementById('progressText');
+      const importMessage = form.querySelector('#importMessage') || document.getElementById('importMessage');
+      const importMsgText = form.querySelector('#importMsgText') || document.getElementById('importMsgText');
       const submitBtn = form.querySelector('button[type="submit"]');
       const fileInput = form.querySelector('input[type="file"][name="arquivo_excel"]');
-      const cancelBtn = document.getElementById('cancelImport');
+      const cancelBtn = form.querySelector('#cancelImport') || document.getElementById('cancelImport');
 
       // limpa mensagens antigas
       if (importMessage) { importMessage.style.display = 'none'; if (importMsgText) importMsgText.textContent = ''; }
@@ -1581,7 +1581,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const modal = document.getElementById('modal-import-entrada');
         // se for cancelImport, abortar XHR em andamento (se houver)
         if (closeBtn.id === 'cancelImport') {
-          const form = document.getElementById('form-import-excel');
+          const modal = document.getElementById('modal-import-entrada');
+          const form = modal ? modal.querySelector('#form-import-excel') : document.getElementById('form-import-excel');
           if (form) {
             const xhr = xhrByForm.get(form);
             if (xhr && typeof xhr.abort === 'function') {

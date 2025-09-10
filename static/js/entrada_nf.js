@@ -671,6 +671,8 @@ document.addEventListener('DOMContentLoaded', () => {
       modalEntradas.classList.add('show');
       try { injectBulkDeleteButton(); } catch(e) {}
       try { attachModalEvents(); } catch(e) {}
+      try { destroyFixedHScrollIfAny(); } catch(e) {}
+      try { setupFixedHScrollImproved(); } catch(e) {}
 
       if (typeof window.initEntradaImport === 'function') window.initEntradaImport();
 
@@ -1528,4 +1530,209 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
   })();
+
+  // --- Medir scrollbar e aplicar compensação (fallback) ---
+  function getScrollbarWidth() {
+    const div = document.createElement('div');
+    div.style.width = '100px';
+    div.style.height = '100px';
+    div.style.overflow = 'scroll';
+    div.style.position = 'absolute';
+    div.style.top = '-9999px';
+    document.body.appendChild(div);
+    const sw = div.offsetWidth - div.clientWidth;
+    document.body.removeChild(div);
+    return sw;
+  }
+  function applyModalScrollbarCompensation() {
+    const sw = getScrollbarWidth();
+    document.documentElement.style.setProperty('--modal-scrollbar-comp', sw + 'px');
+  }
+  applyModalScrollbarCompensation();
+  window.addEventListener('resize', applyModalScrollbarCompensation);
+
+  // --- Trava o scroll do body enquanto o modal está aberto (evita conflitos com scroll da página) ---
+  const modal = document.getElementById('modal-entradas'); // ajuste se seu id for outro
+  if (modal) {
+    const observer = new MutationObserver(muts => {
+      muts.forEach(m => {
+        if (m.attributeName === 'class') {
+          const opened = modal.classList.contains('show');
+          document.body.style.overflow = opened ? 'hidden' : '';
+          // reaplica compensação caso o conteúdo mude após abrir
+          if (opened) applyModalScrollbarCompensation();
+        }
+      });
+    });
+    observer.observe(modal, { attributes: true });
+  }
+  // put this inside DOMContentLoaded scope
+  (function modalScrollSmoothness() {
+    const modal = document.getElementById('modal-entradas'); // ajuste id se necessário
+    const modalBody = modal ? modal.querySelector('.modal-body') : null;
+    if (!modal || !modalBody) return;
+
+    let rafId = null;
+    let isScrolling = false;
+    let scrollEndTimer = null;
+
+    function onScroll() {
+      // listener é passivo, então não bloqueia o evento
+      if (!isScrolling) {
+        isScrolling = true;
+        modal.classList.add('scrolling'); // aplica estilos "leve"
+      }
+
+      // throttle: usa rAF para trabalhar apenas uma vez por frame
+      if (rafId === null) {
+        rafId = requestAnimationFrame(() => {
+          // aqui você pode atualizar posições que dependam do scroll (se necessário)
+          // exemplo: atualizar um header pequeno que mostra posição — evite trabalho pesado aqui
+          rafId = null;
+        });
+      }
+
+      // debounce para detectar fim do scroll
+      if (scrollEndTimer) clearTimeout(scrollEndTimer);
+      scrollEndTimer = setTimeout(() => {
+        isScrolling = false;
+        modal.classList.remove('scrolling');
+      }, 120); // 120ms após último evento de scroll considera que parou
+    }
+
+    // addEventListener com { passive: true } para scrolls e touchmove
+    modalBody.addEventListener('scroll', onScroll, { passive: true });
+    modalBody.addEventListener('touchmove', onScroll, { passive: true });
+
+    // Se você tiver MutationObservers ou resize observers, throttle-os:
+    function debounce(fn, wait = 100) {
+      let t;
+      return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...args), wait);
+      };
+    }
+
+    // exemplo: se já tem um MutationObserver que chama updateComp(), envolva com debounce:
+    // const debouncedUpdate = debounce(updateComp, 150);
+    // observer => debouncedUpdate();
+
+    // cleanup (opcional): se você fechar modal e quiser remover listeners
+    modal.addEventListener('hidden', () => {
+      modalBody.removeEventListener('scroll', onScroll);
+      modalBody.removeEventListener('touchmove', onScroll);
+    });
+  })();
+
+  function setupFixedHScrollImproved() {
+    const modal = document.getElementById('modal-entradas');
+    if (!modal) return;
+    const modalContent = modal.querySelector('.modal-content') || modal;
+    const modalBody = modal.querySelector('.modal-body');
+    if (!modalBody) return;
+    const tableContainer = modalBody.querySelector('.table-container');
+    if (!tableContainer) return;
+    const table = tableContainer.querySelector('table');
+    if (!table) return;
+
+    // remove qualquer wrapper antigo
+    const old = modalBody.querySelector('.fixed-hscroll-wrapper');
+    if (old) {
+      if (old._ro) old._ro.disconnect();
+      old.remove();
+    }
+
+    // cria wrapper (anexa diretamente ao modalBody para sticky funcionar)
+    const wrapper = document.createElement('div');
+    wrapper.className = 'fixed-hscroll-wrapper';
+    wrapper.setAttribute('aria-hidden', 'true');
+
+    const inner = document.createElement('div');
+    inner.className = 'fixed-hscroll-inner';
+    wrapper.appendChild(inner);
+
+    // anexa AO modalBody (sticky funciona relativo ao scroll container modalBody)
+    modalBody.appendChild(wrapper);
+
+    // Atualiza inner width e visibilidade (chamado via rAF)
+    let raf = null;
+    function updateInnerWidthAndVisibility() {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const scrollW = table.scrollWidth || tableContainer.scrollWidth || table.offsetWidth;
+        inner.style.width = (scrollW) + 'px';
+
+        if (scrollW <= tableContainer.clientWidth) {
+          wrapper.style.display = 'none';
+          modalBody.style.paddingBottom = ''; // remove compensação se não há overflow
+        } else {
+          wrapper.style.display = '';
+          modalBody.style.paddingBottom = `calc(var(--fixed-hscroll-h) + var(--fixed-hscroll-gap))`;
+          // alinhar wrapper horizontalmente com o tableContainer (em caso de padding interna)
+          const tcRect = tableContainer.getBoundingClientRect();
+          const mbRect = modalBody.getBoundingClientRect();
+          const relLeft = Math.max(0, tcRect.left - mbRect.left);
+          wrapper.style.left = relLeft + 'px';
+          wrapper.style.width = (tcRect.width) + 'px';
+        }
+      });
+    }
+
+    // sincronização entre barras
+    let syncingFromWrapper = false;
+    let syncingFromTable = false;
+
+    function onTableScroll() {
+      if (syncingFromWrapper) return;
+      syncingFromTable = true;
+      wrapper.scrollLeft = tableContainer.scrollLeft;
+      requestAnimationFrame(() => { syncingFromTable = false; });
+    }
+    function onWrapperScroll() {
+      if (syncingFromTable) return;
+      syncingFromWrapper = true;
+      tableContainer.scrollLeft = wrapper.scrollLeft;
+      requestAnimationFrame(() => { syncingFromWrapper = false; });
+    }
+
+    tableContainer.addEventListener('scroll', onTableScroll, { passive: true });
+    wrapper.addEventListener('scroll', onWrapperScroll, { passive: true });
+
+    // ResizeObserver no table e tableContainer (mais eficiente que MutationObserver pesado)
+    const ro = new (window.ResizeObserver || window.MutationObserver)((entries) => {
+      // pequenas mudanças de layout -> recalcula
+      updateInnerWidthAndVisibility();
+    });
+
+    // observe o table e tableContainer para alterações de tamanho/colunas
+    if (window.ResizeObserver) {
+      const resizeObserver = new ResizeObserver(updateInnerWidthAndVisibility);
+      resizeObserver.observe(table);
+      resizeObserver.observe(tableContainer);
+      wrapper._ro = resizeObserver;
+    } else {
+      // fallback: observe mudanças no container
+      ro.observe(tableContainer, { childList: true, subtree: true, attributes: true });
+      wrapper._ro = ro;
+    }
+
+    // ouvir resize da janela
+    const onWinResize = () => updateInnerWidthAndVisibility();
+    window.addEventListener('resize', onWinResize, { passive: true });
+
+    // chamada inicial
+    updateInnerWidthAndVisibility();
+
+    // guarda referências para cleanup
+    wrapper._cleanup = () => {
+      tableContainer.removeEventListener('scroll', onTableScroll);
+      wrapper.removeEventListener('scroll', onWrapperScroll);
+      window.removeEventListener('resize', onWinResize);
+      if (wrapper._ro) {
+        try { wrapper._ro.disconnect(); } catch (e) {}
+      }
+      try { wrapper.remove(); } catch (e) {}
+    };
+    table._fixedHScrollWrapper = wrapper;
+  }
 });

@@ -363,7 +363,7 @@ html, body {
 .table-container th,
 .table-container td {
   padding: 12px 8px;
-  text-align: left;
+  text-align: center;
   vertical-align: middle;
   font-size: 0.9rem;
   color: #333;

@@ -1380,16 +1380,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   // --- Import Modal (Entrada NF) ---
-  // --- IMPORT (Entrada NF) - inicialização robusta por delegação ---
-  // Substitua o bloco antigo por este. Funciona mesmo com DOM injetado dinamicamente.
   (function () {
-    console.debug('[entrada_nf] inicializando import (delegation)');
+    if (window.__entradaImportDelegationInit) {
+      console.debug('[entrada_nf] import delegation já inicializado — pulando reinit');
+      return;
+    }
+    window.__entradaImportDelegationInit = true;
+
+    console.debug('[entrada_nf] inicializando import (delegation - robust)');
 
     // helpers para mostrar / esconder modal (suporta style.display ou classe .show)
     function showModal(modal) {
       if (!modal) return;
       if (modal.classList) modal.classList.add('show');
-      modal.style.display = 'block';
+      modal.style.display = 'flex';
     }
     function hideModal(modal) {
       if (!modal) return;
@@ -1397,22 +1401,50 @@ document.addEventListener('DOMContentLoaded', () => {
       modal.style.display = 'none';
     }
 
-    // trata submit do formulário (delegado)
+    // calcula checksum SHA-256 do arquivo (hex) - opcional (útil para dedupe no backend)
+    async function computeFileChecksum(file) {
+      if (!window.crypto || !crypto.subtle || !file) return null;
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hex;
+      } catch (err) {
+        console.warn('[entrada_nf] erro ao calcular checksum:', err);
+        return null;
+      }
+    }
+
+    // guarda XHR por form para permitir abort
+    const xhrByForm = new WeakMap();
+
+    // trata submit do formulário (delegado) - versão segura
     async function handleFormSubmit(ev) {
       const form = ev.target;
       if (!form || form.id !== 'form-import-excel') return;
       ev.preventDefault();
 
-      // elementos (podem ter sido adicionados dinamicamente)
+      // evita envio duplicado por flag
+      if (form.dataset.submitting === '1') {
+        console.warn('[entrada_nf] import já em andamento — envio cancelado (flag submitting)');
+        return;
+      }
+
+      // elementos de UI (pode ser que o form esteja dentro do modal injetado)
       const progressContainer = document.getElementById('progressContainer');
       const progressBar = document.getElementById('progressBar');
       const progressText = document.getElementById('progressText');
       const importMessage = document.getElementById('importMessage');
       const importMsgText = document.getElementById('importMsgText');
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const fileInput = form.querySelector('input[type="file"][name="arquivo_excel"]');
+      const cancelBtn = document.getElementById('cancelImport');
 
-      if (importMessage) { importMessage.style.display = 'none'; importMsgText.textContent = ''; }
+      // limpa mensagens antigas
+      if (importMessage) { importMessage.style.display = 'none'; if (importMsgText) importMsgText.textContent = ''; }
 
-      const fileInput = form.querySelector('input[type=file][name=arquivo_excel]');
+      // validações simples
       if (!fileInput || !fileInput.files || !fileInput.files[0]) {
         if (importMessage) { importMessage.style.display = 'block'; importMsgText.textContent = 'Selecione um arquivo antes de enviar.'; importMsgText.style.color = 'red'; }
         return;
@@ -1432,12 +1464,36 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // monta XHR para acompanhar progresso
-      const formData = new FormData(form);
+      // sinaliza envio em andamento
+      form.dataset.submitting = '1';
+      if (submitBtn) submitBtn.disabled = true;
+      if (cancelBtn) cancelBtn.disabled = true;
+      if (fileInput) fileInput.disabled = true;
+
+      // opcional: calcula checksum (pode ajudar o backend a detectar reenvios do mesmo arquivo)
+      let checksum = null;
+      try {
+        checksum = await computeFileChecksum(file);
+        if (checksum) console.debug('[entrada_nf] checksum do arquivo:', checksum);
+      } catch (err) {
+        console.warn('[entrada_nf] falha ao calcular checksum (seguindo sem):', err);
+        checksum = null;
+      }
+
+      // prepara FormData
+      const formData = new FormData();
+      formData.append("arquivo_excel", fileInput.files[0]);
+      if (checksum) formData.append("file_checksum", checksum);
+
+      // cria XHR com suporte a abort
       const xhr = new XMLHttpRequest();
       xhr.open('POST', form.action, true);
-      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+      try { xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest'); } catch(e) { /* some servers restrict setRequestHeader before open in some contexts */ }
 
+      // armazena para possível abort
+      xhrByForm.set(form, xhr);
+
+      // mostra barra
       if (progressContainer) progressContainer.style.display = 'block';
       if (progressBar) progressBar.style.width = '0%';
       if (progressText) progressText.textContent = '0%';
@@ -1448,26 +1504,44 @@ document.addEventListener('DOMContentLoaded', () => {
           if (progressBar) progressBar.style.width = percent + '%';
           if (progressText) progressText.textContent = percent + '%';
         }
-      });
+      }, { passive: true });
 
       xhr.onload = () => {
+        // limpa estado
+        form.dataset.submitting = '0';
+        if (submitBtn) submitBtn.disabled = false;
+        if (cancelBtn) cancelBtn.disabled = false;
+        if (fileInput) fileInput.disabled = false;
+        xhrByForm.delete(form);
+
         let json = null;
         try { json = JSON.parse(xhr.responseText); } catch (err) { json = null; }
+
         if (xhr.status >= 200 && xhr.status < 300) {
           const msg = (json && typeof json.inserted !== 'undefined')
             ? `Importação concluída. Inseridos: ${json.inserted||0}. Falhas: ${json.failed||0}.`
             : 'Importação concluída.';
           if (importMessage) { importMessage.style.display = 'block'; importMsgText.textContent = msg; importMsgText.style.color = 'green'; }
-          // tenta atualizar listagem sem fechar modal
+
+          // log detalhado ajuda a investigar duplicações
+          console.info('[entrada_nf] import sucesso -> resposta:', json || xhr.responseText);
+
+          // atualiza a listagem re-carregando do servidor (não faça append local)
           try {
             const modalSearchEl = document.querySelector('#modal-entradas #searchEntradaInput');
             const q = modalSearchEl && modalSearchEl.value ? modalSearchEl.value.trim() : '';
             if (typeof loadPage === 'function') loadPage(1, q);
-          } catch (err) { console.warn('[entrada_nf] erro ao recarregar listagem:', err); }
+            else console.warn('[entrada_nf] loadPage não encontrada para atualizar listagem');
+          } catch (err) {
+            console.warn('[entrada_nf] erro ao recarregar listagem:', err);
+          }
+
         } else {
           const errText = (json && json.error) ? json.error : (xhr.responseText || xhr.statusText);
           if (importMessage) { importMessage.style.display = 'block'; importMsgText.textContent = 'Erro ao importar: ' + errText; importMsgText.style.color = 'red'; }
+          console.error('[entrada_nf] import falhou ->', errText);
         }
+
         // limpa barra depois de curto tempo
         setTimeout(() => {
           if (progressContainer) progressContainer.style.display = 'none';
@@ -1477,15 +1551,23 @@ document.addEventListener('DOMContentLoaded', () => {
       };
 
       xhr.onerror = () => {
+        form.dataset.submitting = '0';
+        if (submitBtn) submitBtn.disabled = false;
+        if (cancelBtn) cancelBtn.disabled = false;
+        if (fileInput) fileInput.disabled = false;
+        xhrByForm.delete(form);
+
         if (importMessage) { importMessage.style.display = 'block'; importMsgText.textContent = 'Falha na conexão ao enviar arquivo.'; importMsgText.style.color = 'red'; }
+        console.error('[entrada_nf] erro de conexão durante import');
         if (progressContainer) setTimeout(() => progressContainer.style.display = 'none', 800);
       };
 
       xhr.send(formData);
     }
 
-    // delegação de clique: abre modal, fecha modal (bons para conteúdo dinâmico)
+    // handler global de clique (abre/fecha modal, suporta botões dinâmicos)
     function globalClickHandler(e) {
+      // abre modal
       const openBtn = e.target.closest('#btnImportEntrada');
       if (openBtn) {
         const modal = document.getElementById('modal-import-entrada');
@@ -1493,14 +1575,25 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // fecha modal (botão fechar ou cancelar dentro do modal)
       const closeBtn = e.target.closest('#importClose, #cancelImport');
       if (closeBtn) {
         const modal = document.getElementById('modal-import-entrada');
+        // se for cancelImport, abortar XHR em andamento (se houver)
+        if (closeBtn.id === 'cancelImport') {
+          const form = document.getElementById('form-import-excel');
+          if (form) {
+            const xhr = xhrByForm.get(form);
+            if (xhr && typeof xhr.abort === 'function') {
+              try { xhr.abort(); console.debug('[entrada_nf] envio abortado pelo usuário (cancelImport)'); } catch (err) { console.warn('[entrada_nf] falha ao abortar XHR:', err); }
+            }
+          }
+        }
         hideModal(modal);
         return;
       }
 
-      // clique fora do conteúdo do modal: verifica se é o próprio backdrop
+      // clique fora do conteúdo do modal: verifica se é o próprio backdrop (fecha)
       const modalEl = document.getElementById('modal-import-entrada');
       if (modalEl && e.target === modalEl) {
         hideModal(modalEl);
@@ -1510,7 +1603,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Inicializa: adiciona listeners delegados (um só listener de click + submit)
     function init() {
-      console.debug('[entrada_nf] attach delegated listeners');
+      console.debug('[entrada_nf] attach delegated listeners (import)');
+      // garante que não existam binds duplicados
       document.removeEventListener('click', globalClickHandler);
       document.addEventListener('click', globalClickHandler);
 
@@ -1519,6 +1613,17 @@ document.addEventListener('DOMContentLoaded', () => {
       document.addEventListener('submit', function (ev) {
         if (ev.target && ev.target.id === 'form-import-excel') handleFormSubmit(ev);
       }, true);
+
+      // suporte ao ESC para fechar modal (global)
+      document.removeEventListener('keydown', keydownHandler);
+      document.addEventListener('keydown', keydownHandler);
+    }
+
+    function keydownHandler(ev) {
+      if (ev.key === 'Escape' || ev.key === 'Esc') {
+        const modal = document.getElementById('modal-import-entrada');
+        if (modal && modal.classList.contains('show')) hideModal(modal);
+      }
     }
 
     // aguarda DOM pronto (fallback com timeout)
@@ -1526,103 +1631,18 @@ document.addEventListener('DOMContentLoaded', () => {
       init();
     } else {
       document.addEventListener('DOMContentLoaded', init);
-      setTimeout(init, 200); // fallback
+      setTimeout(init, 250); // fallback
     }
 
-  })();
-
-  // --- Medir scrollbar e aplicar compensação (fallback) ---
-  function getScrollbarWidth() {
-    const div = document.createElement('div');
-    div.style.width = '100px';
-    div.style.height = '100px';
-    div.style.overflow = 'scroll';
-    div.style.position = 'absolute';
-    div.style.top = '-9999px';
-    document.body.appendChild(div);
-    const sw = div.offsetWidth - div.clientWidth;
-    document.body.removeChild(div);
-    return sw;
-  }
-  function applyModalScrollbarCompensation() {
-    const sw = getScrollbarWidth();
-    document.documentElement.style.setProperty('--modal-scrollbar-comp', sw + 'px');
-  }
-  applyModalScrollbarCompensation();
-  window.addEventListener('resize', applyModalScrollbarCompensation);
-
-  // --- Trava o scroll do body enquanto o modal está aberto (evita conflitos com scroll da página) ---
-  const modal = document.getElementById('modal-entradas'); // ajuste se seu id for outro
-  if (modal) {
-    const observer = new MutationObserver(muts => {
-      muts.forEach(m => {
-        if (m.attributeName === 'class') {
-          const opened = modal.classList.contains('show');
-          document.body.style.overflow = opened ? 'hidden' : '';
-          // reaplica compensação caso o conteúdo mude após abrir
-          if (opened) applyModalScrollbarCompensation();
-        }
-      });
-    });
-    observer.observe(modal, { attributes: true });
-  }
-  // put this inside DOMContentLoaded scope
-  (function modalScrollSmoothness() {
-    const modal = document.getElementById('modal-entradas'); // ajuste id se necessário
-    const modalBody = modal ? modal.querySelector('.modal-body') : null;
-    if (!modal || !modalBody) return;
-
-    let rafId = null;
-    let isScrolling = false;
-    let scrollEndTimer = null;
-
-    function onScroll() {
-      // listener é passivo, então não bloqueia o evento
-      if (!isScrolling) {
-        isScrolling = true;
-        modal.classList.add('scrolling'); // aplica estilos "leve"
-      }
-
-      // throttle: usa rAF para trabalhar apenas uma vez por frame
-      if (rafId === null) {
-        rafId = requestAnimationFrame(() => {
-          // aqui você pode atualizar posições que dependam do scroll (se necessário)
-          // exemplo: atualizar um header pequeno que mostra posição — evite trabalho pesado aqui
-          rafId = null;
-        });
-      }
-
-      // debounce para detectar fim do scroll
-      if (scrollEndTimer) clearTimeout(scrollEndTimer);
-      scrollEndTimer = setTimeout(() => {
-        isScrolling = false;
-        modal.classList.remove('scrolling');
-      }, 120); // 120ms após último evento de scroll considera que parou
-    }
-
-    // addEventListener com { passive: true } para scrolls e touchmove
-    modalBody.addEventListener('scroll', onScroll, { passive: true });
-    modalBody.addEventListener('touchmove', onScroll, { passive: true });
-
-    // Se você tiver MutationObservers ou resize observers, throttle-os:
-    function debounce(fn, wait = 100) {
-      let t;
-      return (...args) => {
-        clearTimeout(t);
-        t = setTimeout(() => fn(...args), wait);
+    // expõe função initEntradaImport (compatibilidade com outras partes do código)
+    if (typeof window.initEntradaImport !== 'function') {
+      window.initEntradaImport = function () {
+        // função de compatibilidade (pode ser chamada externamente)
+        console.debug('[entrada_nf] window.initEntradaImport() chamada — noop por enquanto');
       };
     }
 
-    // exemplo: se já tem um MutationObserver que chama updateComp(), envolva com debounce:
-    // const debouncedUpdate = debounce(updateComp, 150);
-    // observer => debouncedUpdate();
-
-    // cleanup (opcional): se você fechar modal e quiser remover listeners
-    modal.addEventListener('hidden', () => {
-      modalBody.removeEventListener('scroll', onScroll);
-      modalBody.removeEventListener('touchmove', onScroll);
-    });
-  })();
+  })(); // fim da IIFE
 
   function setupFixedHScrollImproved() {
     const modal = document.getElementById('modal-entradas');

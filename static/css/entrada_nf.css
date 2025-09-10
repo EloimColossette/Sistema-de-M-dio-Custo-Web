@@ -630,3 +630,156 @@ td.acoes {
 .fixed-hscroll-wrapper::-webkit-scrollbar-thumb:hover {
   background: rgba(0,0,0,0.25);
 }
+
+/* ===== Compatibilidade visual com modal-import do saída_nf =====
+   Aplica os mesmos estilos do modal-import (saida_nf) ao
+   modal de entrada (id: #modal-import-entrada) */
+.modal-import,
+#modal-import-entrada {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5);
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+}
+
+.modal-import.show,
+#modal-import-entrada.show {
+  display: flex !important;
+}
+
+.modal-import-content,
+#modal-import-entrada .modal-import-content {
+  background: #fff;
+  padding: 1.5rem;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 400px;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.modal-import-close,
+#modal-import-entrada .modal-import-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 1rem;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+/* Se o seu HTML usa os mesmos IDs interno do form/progress do saida_nf,
+   estes seletores garantem que fiquem estilizados também dentro do modal de entrada */
+#modal-import-entrada #progressContainer { margin-top: 10px; }
+#modal-import-entrada #progressBar {
+  height: 8px;
+  background: #007bff;
+  border-radius: 4px;
+  transition: width 0.2s;
+}
+
+/* Estilo do modal-import-entrada (compatível com seu .modal-content atual) */
+#modal-import-entrada.modal {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5);
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
+}
+#modal-import-entrada.modal.show {
+  display: flex !important;
+}
+
+/* aplica estilo ao .modal-content já usado no markup */
+#modal-import-entrada .modal-content {
+  background: #fff;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 440px; /* um pouco maior se precisar */
+  position: relative;
+  box-sizing: border-box;
+  max-height: 90vh;
+  overflow: auto;
+}
+
+/* close dentro do modal de import */
+#modal-import-entrada .modal-header .close,
+#modal-import-entrada .close {
+  position: absolute;
+  top: 0.5rem;
+  right: 1rem;
+  font-size: 1.5rem;
+  color: #fff;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+/* progress / mensagem dentro do modal */
+#modal-import-entrada #progressContainer { margin-top: 10px; }
+#modal-import-entrada #progressBar {
+  height: 8px;
+  background: #007bff;
+  border-radius: 4px;
+  transition: width 0.2s;
+}
+#modal-import-entrada #importMessage { margin-top: 10px; }
+
+/* header: usa flex para centralizar título e manter close à direita */
+#modal-entradas .modal-header,
+#modal-import-entrada .modal-header {
+  display: flex;
+  align-items: center;        /* centraliza verticalmente */
+  justify-content: center;    /* título centralizado */
+  position: relative;
+  padding: 12px 48px;         /* espaço lateral para o botão close */
+  box-sizing: border-box;
+}
+
+/* o título ocupa todo o espaço central (flexible) */
+#modal-entradas .modal-header h3,
+#modal-import-entrada .modal-header h3 {
+  margin: 0;
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 1.25rem;
+  line-height: 1.2;
+  color: #fff;
+  word-break: break-word;
+}
+
+/* botão close: posicionado absoluto à direita, verticalmente centralizado */
+#modal-entradas .modal-header .close,
+#modal-import-entrada .modal-header .close,
+#modal-entradas .close,
+#modal-import-entrada .close {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  font-size: 1.5rem;
+  color: #fff;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+}
+
+/* protege largura do título (não permite que o '×' o sobreponha) */
+#modal-entradas .modal-header h3 { padding-right: 48px; }
+#modal-import-entrada .modal-header h3 { padding-right: 48px; }
+
+/* se quiser que o background do header ocupe toda a largura do modal-content: */
+#modal-entradas .modal-content > .modal-header,
+#modal-import-entrada .modal-content > .modal-header {
+  width: 100%;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}

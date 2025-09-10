@@ -127,17 +127,18 @@
       </div>
     </div>
 
-    <!-- Modal de Importação Excel (Entrada NF) -->
-    <div id="modal-import-entrada" class="modal" style="display:none;">
+    <!-- Modal de Importação Excel (Entrada NF) - APENAS UMA VEZ -->
+    <div id="modal-import-entrada" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalImportEntradasTitle" tabindex="-1" style="display:none;">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Importar Excel — Entradas</h3>
-          <button id="importClose" class="close" type="button">&times;</button>
+          <h3 id="modalImportEntradasTitle">Importar Excel — Entradas</h3>
+          <!-- botão de fechar com id esperado pelo JS -->
+          <button id="importClose" class="close" type="button" aria-label="Fechar import">&times;</button>
         </div>
 
         <form id="form-import-excel" action="/entrada_nf/importar_excel" method="post" enctype="multipart/form-data">
           <div class="modal-body">
-            <p>Selecione o arquivo Excel (.xls ou .xlsx). Colunas esperadas: <strong>Data, NF, Fornecedor, Produto, Custo Empresa, IPI, Valor Integral</strong>.</p>
+            <p>Selecione o arquivo Excel (.xls ou .xlsx).</p>
 
             <div>
               <label for="arquivo_excel">Arquivo Excel</label>
@@ -157,7 +158,7 @@
             </div>
           </div>
 
-          <div class="modal-footer">
+          <div class="modal-footer" style="padding: 12px;">
             <button type="button" id="cancelImport" class="btn">Cancelar</button>
             <button type="submit" class="btn btn-primary">Enviar</button>
           </div>

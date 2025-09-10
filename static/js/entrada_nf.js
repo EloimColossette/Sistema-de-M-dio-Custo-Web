@@ -1635,14 +1635,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const table = tableContainer.querySelector('table');
     if (!table) return;
 
-    // remove qualquer wrapper antigo
-    const old = modalBody.querySelector('.fixed-hscroll-wrapper');
+    // remove wrapper antigo, se existir
+    const old = modalContent.querySelector('.fixed-hscroll-wrapper');
     if (old) {
       if (old._ro) old._ro.disconnect();
+      if (old._cleanup) { try { old._cleanup(); } catch(e) {} }
       old.remove();
     }
 
-    // cria wrapper (anexa diretamente ao modalBody para sticky funcionar)
+    // cria wrapper
     const wrapper = document.createElement('div');
     wrapper.className = 'fixed-hscroll-wrapper';
     wrapper.setAttribute('aria-hidden', 'true');
@@ -1651,29 +1652,63 @@ document.addEventListener('DOMContentLoaded', () => {
     inner.className = 'fixed-hscroll-inner';
     wrapper.appendChild(inner);
 
-    // anexa AO modalBody (sticky funciona relativo ao scroll container modalBody)
-    modalBody.appendChild(wrapper);
+    modalContent.appendChild(wrapper);
 
-    // Atualiza inner width e visibilidade (chamado via rAF)
+    function readGap() {
+      const val = getComputedStyle(document.documentElement).getPropertyValue('--fixed-hscroll-gap') || '';
+      const n = parseInt(val, 10);
+      return Number.isFinite(n) ? n : 8;
+    }
+
+    function readWrapperHeight() {
+      // tenta ler a variável CSS, senão usa a altura real do wrapper
+      const vh = getComputedStyle(document.documentElement).getPropertyValue('--fixed-hscroll-h') || '';
+      const n = parseFloat(vh);
+      if (Number.isFinite(n) && n > 0) return n;
+      return wrapper.clientHeight || 14;
+    }
+
     let raf = null;
+
     function updateInnerWidthAndVisibility() {
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         const scrollW = table.scrollWidth || tableContainer.scrollWidth || table.offsetWidth;
         inner.style.width = (scrollW) + 'px';
 
+        const tcRect = tableContainer.getBoundingClientRect();
+        const mcRect = modalContent.getBoundingClientRect();
+
         if (scrollW <= tableContainer.clientWidth) {
           wrapper.style.display = 'none';
-          modalBody.style.paddingBottom = ''; // remove compensação se não há overflow
+          // limpa padding-bottom adicional
+          modalContent.style.paddingBottom = '';
         } else {
           wrapper.style.display = '';
-          modalBody.style.paddingBottom = `calc(var(--fixed-hscroll-h) + var(--fixed-hscroll-gap))`;
-          // alinhar wrapper horizontalmente com o tableContainer (em caso de padding interna)
-          const tcRect = tableContainer.getBoundingClientRect();
-          const mbRect = modalBody.getBoundingClientRect();
-          const relLeft = Math.max(0, tcRect.left - mbRect.left);
+          // alinha horizontalmente ao tableContainer
+          const relLeft = Math.max(0, tcRect.left - mcRect.left);
           wrapper.style.left = relLeft + 'px';
           wrapper.style.width = (tcRect.width) + 'px';
+
+          // posiciona verticalmente acima da paginação (se houver)
+          const pagination = modalContent.querySelector('.pagination');
+          const paginationH = pagination ? pagination.offsetHeight : 0;
+          const gap = readGap();
+          const wrapperH = readWrapperHeight();
+
+          // bottom: desloca a barra para ficar acima da paginação
+          wrapper.style.bottom = (paginationH + gap) + 'px';
+
+          // adiciona padding-bottom ao modalContent para evitar que a tabela "fique por baixo"
+          // soma pagination + wrapper + gap extra de segurança
+          const extra = 12;
+          modalContent.style.paddingBottom = (paginationH + wrapperH + gap + extra) + 'px';
+
+          // garante que paginação tenha z-index maior (para ficar sobre a barra)
+          if (pagination) {
+            pagination.style.position = pagination.style.position || 'relative';
+            pagination.style.zIndex = pagination.style.zIndex || '1300';
+          }
         }
       });
     }
@@ -1688,6 +1723,7 @@ document.addEventListener('DOMContentLoaded', () => {
       wrapper.scrollLeft = tableContainer.scrollLeft;
       requestAnimationFrame(() => { syncingFromTable = false; });
     }
+
     function onWrapperScroll() {
       if (syncingFromTable) return;
       syncingFromWrapper = true;
@@ -1698,40 +1734,28 @@ document.addEventListener('DOMContentLoaded', () => {
     tableContainer.addEventListener('scroll', onTableScroll, { passive: true });
     wrapper.addEventListener('scroll', onWrapperScroll, { passive: true });
 
-    // ResizeObserver no table e tableContainer (mais eficiente que MutationObserver pesado)
-    const ro = new (window.ResizeObserver || window.MutationObserver)((entries) => {
-      // pequenas mudanças de layout -> recalcula
-      updateInnerWidthAndVisibility();
-    });
-
-    // observe o table e tableContainer para alterações de tamanho/colunas
-    if (window.ResizeObserver) {
-      const resizeObserver = new ResizeObserver(updateInnerWidthAndVisibility);
-      resizeObserver.observe(table);
-      resizeObserver.observe(tableContainer);
-      wrapper._ro = resizeObserver;
-    } else {
-      // fallback: observe mudanças no container
-      ro.observe(tableContainer, { childList: true, subtree: true, attributes: true });
+    const ro = new MutationObserver(() => updateInnerWidthAndVisibility());
+    try {
+      ro.observe(table, { attributes: true, childList: true, subtree: true });
       wrapper._ro = ro;
+    } catch (e) {
+      wrapper._ro = null;
     }
 
-    // ouvir resize da janela
     const onWinResize = () => updateInnerWidthAndVisibility();
     window.addEventListener('resize', onWinResize, { passive: true });
 
-    // chamada inicial
+    // inicializa
     updateInnerWidthAndVisibility();
 
-    // guarda referências para cleanup
+    // cleanup
     wrapper._cleanup = () => {
       tableContainer.removeEventListener('scroll', onTableScroll);
       wrapper.removeEventListener('scroll', onWrapperScroll);
       window.removeEventListener('resize', onWinResize);
-      if (wrapper._ro) {
-        try { wrapper._ro.disconnect(); } catch (e) {}
-      }
+      if (wrapper._ro) { try { wrapper._ro.disconnect(); } catch (e) {} }
       try { wrapper.remove(); } catch (e) {}
+      modalContent.style.paddingBottom = '';
     };
     table._fixedHScrollWrapper = wrapper;
   }

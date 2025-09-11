@@ -636,6 +636,42 @@ def editar_entrada(id):
 
     return jsonify({"status": "ok", "updated": updated})
 
+@entrada_nf_bp.route('/api/fornecedores/list')
+@login_required
+def api_fornecedores_list():
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("SELECT id, nome FROM fornecedores ORDER BY nome")
+    rows = cur.fetchall()
+    data = [{"id": r[0], "nome": r[1]} for r in rows]
+    cur.close()
+    conn.close()
+    return jsonify(data)
+
+@entrada_nf_bp.route('/api/materiais/list')
+@login_required
+def api_materiais_list():
+    conn = conectar()
+    cur = conn.cursor()
+    # DISTINCT para evitar duplicatas entre fornecedores
+    cur.execute("SELECT DISTINCT nome FROM materiais ORDER BY nome")
+    data = [{"id": i, "nome": r[0]} for i, r in enumerate(cur.fetchall())]
+    cur.close()
+    conn.close()
+    return jsonify(data)
+
+@entrada_nf_bp.route('/api/produtos/list')
+@login_required
+def api_produtos_list():
+    conn = conectar()
+    cur = conn.cursor()
+    cur.execute("SELECT id, nome FROM produtos ORDER BY nome")
+    data = [{"id": r[0], "nome": r[1]} for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return jsonify(data)
+
+
 @entrada_nf_bp.route('/ids_all', methods=['POST'])
 @login_required
 def ids_all():

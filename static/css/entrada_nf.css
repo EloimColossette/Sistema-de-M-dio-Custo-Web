@@ -909,3 +909,38 @@ td.acoes {
   #modal-import-entrada input[type="file"] { width: 100%; }
   #modal-import-entrada #progressText { font-size: 11px; margin-top: 6px; white-space: normal; }
 }
+
+#modal-entradas .table-container table td .edit-input,
+#modal-entradas .table-container table td input.edit-input,
+#modal-entradas .table-container table td select.edit-input {
+  display: block;
+  width: 100%;
+  min-width: 110px;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+#modal-entradas .table-container table { table-layout: auto; }
+
+/* Ajuste visual para selects */
+#modal-entradas .table-container table td select.edit-input {
+  -webkit-appearance: auto;
+  appearance: auto;
+}
+
+/* botões ícone com emoji */
+td.acoes .btn-save,
+td.acoes .btn-cancel {
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  margin: 0 2px;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 18px;      /* controla o tamanho do emoji */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+td.acoes .btn-save[disabled] { opacity: 0.5; cursor: not-allowed; }

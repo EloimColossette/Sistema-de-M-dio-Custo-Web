@@ -621,6 +621,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // reaplica seus inicializadores
       try { initMainNumericInputs(modalContent); } catch(e) {}
+      // preenche células/inputs numéricos vazios com zeros formatados
+      try { fillEmptyNumericCells(modalContent); } catch(e) {}
       // Restaura seleção global
       modalContent.querySelectorAll('.selectEntrada').forEach(cb => {
         if (selectedIds.has(cb.dataset.id)) cb.checked = true;
@@ -858,6 +860,306 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   }
+
+  // === Inline edit with selects populated from API or fallback DOM ===
+  (function attachEditDeleteDelegationWithFullLists() {
+    const root = document.getElementById('modal-entradas');
+    if (!root) return;
+
+    const URL_FORNECEDORES = '/entrada_nf/api/fornecedores/list';
+    const URL_MATERIAIS    = '/entrada_nf/api/materiais/list';
+    const URL_PRODUTOS     = '/entrada_nf/api/produtos/list';
+
+    const cache = { fornecedores: null, materiais: null, produtos: null };
+
+    function normalizeListPayload(payload) {
+      if (!payload) return [];
+      if (Array.isArray(payload)) return payload;
+      if (payload.rows && Array.isArray(payload.rows)) return payload.rows;
+      if (payload.data && Array.isArray(payload.data)) return payload.data;
+      for (const k of Object.keys(payload || {})) {
+        if (Array.isArray(payload[k])) return payload[k];
+      }
+      return [];
+    }
+
+    async function fetchList(url) {
+      try {
+        const resp = await fetch(url, { credentials: 'same-origin' });
+        if (!resp.ok) return [];
+        const data = await resp.json().catch(() => null);
+        const arr = normalizeListPayload(data);
+        return arr.map((it, i) => {
+          if (typeof it === 'string') return { id: it, nome: it };
+          if (it && (it.nome || it.name || it.id !== undefined)) {
+            return { id: it.id !== undefined ? it.id : i, nome: it.nome || it.name || String(it.id) || String(i) };
+          }
+          return { id: i, nome: String(it) };
+        });
+      } catch {
+        return [];
+      }
+    }
+
+    function collectFromTable(columnName) {
+      const tds = Array.from(document.querySelectorAll(`#modal-entradas td[data-col="${columnName}"]`));
+      const set = new Set();
+      tds.forEach(td => {
+        const v = (td.textContent || '').trim();
+        if (v !== '') set.add(v);
+      });
+      return Array.from(set).map((v, i) => ({ id: i, nome: v }));
+    }
+
+    async function getOptions(key) {
+      if (cache[key]) return cache[key];
+      let opts = [];
+      if (key === 'fornecedores') opts = await fetchList(URL_FORNECEDORES);
+      else if (key === 'materiais') opts = await fetchList(URL_MATERIAIS);
+      else if (key === 'produtos') opts = await fetchList(URL_PRODUTOS);
+
+      const seen = new Set();
+      opts = opts.filter(o => {
+        const lower = o.nome.toLowerCase();
+        if (seen.has(lower)) return false;
+        seen.add(lower);
+        return true;
+      });
+
+      if (!opts || opts.length === 0) opts = collectFromTable(key);
+      if (!opts || opts.length === 0) opts = [{ id: '', nome: '(vazio)' }];
+      cache[key] = opts;
+      return opts;
+    }
+
+    function buildSelect(name, options, selectedText) {
+      const select = document.createElement('select');
+      select.className = 'edit-input';
+      select.name = name;
+      select.style.width = '100%';
+      select.style.boxSizing = 'border-box';
+
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = '';
+      select.appendChild(empty);
+
+      const lowerSel = (selectedText || '').trim().toLowerCase();
+      let matched = false;
+
+      options.forEach(opt => {
+        const o = document.createElement('option');
+        o.value = String(opt.nome);
+        o.textContent = String(opt.nome);
+        if (o.value.trim().toLowerCase() === lowerSel) {
+          o.selected = true;
+          matched = true;
+        }
+        select.appendChild(o);
+      });
+
+      if (!matched && selectedText) {
+        const fallback = document.createElement('option');
+        fallback.value = selectedText;
+        fallback.textContent = selectedText;
+        fallback.selected = true;
+        select.appendChild(fallback);
+      }
+      return select;
+    }
+
+    function buildInputHTML(col, value, type = 'text') {
+      const v = (value === undefined || value === null) ? '' : String(value).replace(/"/g, '&quot;');
+      const style = 'style="width:100%; box-sizing:border-box; padding:6px 8px; font-size:13px;"';
+      if (type === 'date') return `<input class="edit-input" name="${col}" type="date" value="${v}" ${style} />`;
+      return `<input class="edit-input" name="${col}" type="text" value="${v}" ${style} />`;
+    }
+
+    root.addEventListener('click', async function (e) {
+      const delBtn = e.target.closest('.btn-excluir');
+      if (delBtn) {
+        e.preventDefault();
+        const id = delBtn.dataset.id;
+        const row = delBtn.closest('tr');
+        if (typeof confirmAndDeleteSingle === 'function') await confirmAndDeleteSingle(id, row);
+        return;
+      }
+
+      const editBtn = e.target.closest('.btn-editar');
+      if (!editBtn) return;
+      e.preventDefault();
+      const row = editBtn.closest('tr');
+      if (!row || row.classList.contains('editing')) return;
+      row.classList.add('editing');
+
+      const allTds = Array.from(row.querySelectorAll('td[data-col]'));
+      const editableTds = allTds.filter(td => td.dataset.col !== 'select' && td.dataset.col !== 'acoes');
+
+      const originalHTML = {};
+      editableTds.forEach(td => originalHTML[td.dataset.col] = td.innerHTML);
+      const actionsTd = row.querySelector('td.acoes') || row.lastElementChild;
+      const prevActionsHtml = actionsTd ? actionsTd.innerHTML : '';
+
+      const pFor = getOptions('fornecedores');
+      const pMat = getOptions('materiais');
+      const pProd = getOptions('produtos');
+
+      for (const td of editableTds) {
+        const col = td.dataset.col;
+        const text = (td.textContent || '').trim();
+
+        if (col === 'fornecedor') td.innerHTML = '', td.appendChild(buildSelect(col, await pFor, text));
+        else if (/^material_\d+$/.test(col)) td.innerHTML = '', td.appendChild(buildSelect(col, await pMat, text));
+        else if (col === 'produto') td.innerHTML = '', td.appendChild(buildSelect(col, await pProd, text));
+        else if (col === 'data') {
+          const iso = (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) ? text.split('/').reverse().join('-') : text;
+          td.innerHTML = buildInputHTML(col, iso, 'date');
+        } else td.innerHTML = buildInputHTML(col, text, 'text');
+      }
+
+      if (actionsTd) actionsTd.innerHTML = `
+        <button type="button" class="btn-save" title="Salvar" aria-label="Salvar">💾</button>
+        <button type="button" class="btn-cancel" title="Cancelar" aria-label="Cancelar">❌</button>
+      `;
+
+      const cancelBtn = row.querySelector('.btn-cancel');
+      if (cancelBtn) cancelBtn.addEventListener('click', ev => {
+        ev.preventDefault();
+        editableTds.forEach(td => td.innerHTML = originalHTML[td.dataset.col] ?? td.innerHTML);
+        if (actionsTd) actionsTd.innerHTML = prevActionsHtml;
+        row.classList.remove('editing');
+      }, { once: true });
+
+      const saveBtn = row.querySelector('.btn-save');
+      if (saveBtn) saveBtn.addEventListener('click', async ev => {
+        ev.preventDefault();
+        const idElem = row.querySelector('.selectEntrada') || row.querySelector('.btn-editar');
+        const id = idElem ? (idElem.dataset.id || idElem.value) : null;
+        if (!id) { alert('ID não encontrado'); return; }
+
+        const fields = {};
+        Array.from(row.querySelectorAll('.edit-input')).forEach(el => {
+          let val = el.value;
+          const name = el.name;
+
+          // normaliza monetários
+          if (/custo|valor|preco/i.test(name) && val) {
+            val = val.replace(/\./g, '').replace(',', '.');
+            val = parseFloat(val).toFixed(2).replace('.', ',');
+          }
+
+          fields[name] = val;
+        });
+
+        const url = `/entrada_nf/editar/${encodeURIComponent(id)}`;
+        const headers = { 'Content-Type': 'application/json' };
+        if (typeof getCsrfToken === 'function') { const csrf = getCsrfToken(); if (csrf) headers['X-CSRFToken'] = csrf; }
+
+        try {
+          saveBtn.disabled = true;
+          const resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ fields }), credentials: 'same-origin' });
+          const data = await resp.json().catch(() => null);
+          if (!resp.ok || !data || data.status !== 'ok') throw new Error((data && data.msg) ? data.msg : `HTTP ${resp.status}`);
+
+          const updated = data.updated || {};
+          editableTds.forEach(td => {
+            const col = td.dataset.col;
+            let newVal = updated[col];
+            if (newVal === undefined) {
+              const inp = td.querySelector('.edit-input');
+              if (!inp) return;
+              newVal = inp.tagName.toLowerCase() === 'select' ? inp.options[inp.selectedIndex]?.text || inp.value : inp.value;
+            }
+
+            // === Normaliza formato BR ===
+            if (col === 'data' && /^\d{4}-\d{2}-\d{2}$/.test(newVal)) {
+              const [y, m, d] = newVal.split('-');
+              newVal = `${d}/${m}/${y}`;
+            } else if (col.toLowerCase().includes('nf') || col.toLowerCase().includes('numero')) {
+              newVal = String(parseInt(String(newVal).replace(/\./g, '').replace(',', '')));
+            } else if ((typeof newVal === 'string' && newVal.trim().endsWith('%')) || col.toLowerCase().includes('ipi') || col.toLowerCase().includes('percent')) {
+              let raw = String(newVal).replace('%', '').trim().replace(',', '.');
+              if (!isNaN(raw)) newVal = parseFloat(raw).toFixed(2).replace('.', ',') + '%';
+            } else if (!isNaN(String(newVal).replace(',', '.'))) {
+              let num = parseFloat(String(newVal).replace(',', '.'));
+              if (!isNaN(num)) {
+                let [intPart, decPart] = num.toFixed(2).split('.');
+                intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+                newVal = intPart + ',' + decPart;
+              }
+            }
+
+            td.textContent = newVal;
+          });
+
+          if (actionsTd) actionsTd.innerHTML = prevActionsHtml;
+          row.classList.remove('editing');
+          alert('Atualizado com sucesso.');
+        } catch (err) {
+          alert('Falha ao salvar: ' + (err.message || err));
+          saveBtn.disabled = false;
+        }
+      }, { once: true });
+    });
+  })();
+
+  // --- preenche células/inputs numéricos vazios com 0,00 / 0,000 ---
+  function fillEmptyNumericCells(root) {
+    if (!root) return;
+    const prefixes = [
+      'valor_unitario',          // cobre valor_unitario_1..N e valor_unitario (sem sufixo)
+      'duplicata',               // duplicata_1..N
+      'valor_unitario_energia',  // campo específico
+      'valor_mao_obra_tm_metallica',
+      'peso_liquido',
+      'valor_integral',
+      'peso_integral'
+    ];
+
+    prefixes.forEach(pref => {
+      // encontra tds com data-col que começam com o prefixo, e também inputs cujo name/id/ data-col começam com prefixo
+      const tds = Array.from(root.querySelectorAll(`td[data-col^="${pref}"], td[class*="${pref}"], td.${pref}`));
+      const inputs = Array.from(root.querySelectorAll(
+        `input[data-col^="${pref}"], input[name^="${pref}"], input[id^="${pref}"]`
+      ));
+
+      const decimals = pref.startsWith('peso') ? 3 : 2;
+      const zeroText = decimals === 3 ? '0,000' : '0,00';
+
+      tds.forEach(td => {
+        const txt = (td.textContent || '').trim();
+        // trata como vazio também traços/placeholder comuns
+        if (txt === '' || txt === '-' || txt === '—' || txt === 'null' || txt === 'undefined') {
+          // se dentro do td existir um input, atualiza o input; senão atualiza o textContent
+          const inp = td.querySelector('input, select, textarea');
+          if (inp) {
+            if (inp.tagName.toLowerCase() === 'input' || inp.tagName.toLowerCase() === 'textarea') {
+              inp.value = zeroText;
+              // marca dataset.col se não existir (ajuda handlers posteriores)
+              if (!inp.dataset.col && inp.name) inp.dataset.col = inp.name;
+              // força formatação final (se existir)
+              try { if (typeof handleNumericFinalize === 'function') handleNumericFinalize(inp); } catch(e){/* ignore */ }
+            } else if (inp.tagName.toLowerCase() === 'select') {
+              // nada para setar em selects (deixa em branco)
+            }
+          } else {
+            td.textContent = zeroText;
+          }
+        }
+      });
+
+      // inputs soltos (fora do td) — por exemplo formulários de edição/linhas inline
+      inputs.forEach(inp => {
+        const v = (inp.value || '').trim();
+        if (v === '' || v === '-' || v === '—') {
+          inp.value = zeroText;
+          if (!inp.dataset.col && inp.name) inp.dataset.col = inp.name;
+          try { if (typeof handleNumericFinalize === 'function') handleNumericFinalize(inp); } catch(e){/* ignore */ }
+        }
+      });
+    });
+  }
+
 
   // Gestão de Materiais (ajustado para usar input type="text" e data-col)
   const materiaisContainer = document.getElementById('materiais-container');
@@ -1461,8 +1763,12 @@ document.addEventListener('DOMContentLoaded', () => {
       modalFiltros.style.display = 'flex';
       modalFiltros.setAttribute('aria-hidden', 'false');
 
+      // ... carregar listagem ...
       const q = ($id('searchEntradaInput') && $id('searchEntradaInput').value) ? $id('searchEntradaInput').value.trim() : '';
       loadEntradasIntoModal({ page: 1, search: q });
+
+      // binda controles de fechar / ESC / overlay
+      try { window.bindFiltersModalControls(); } catch(e){ console.warn('bindFiltersModalControls falhou', e); }
     }
 
     document.addEventListener('click', function(ev){
@@ -1472,6 +1778,80 @@ document.addEventListener('DOMContentLoaded', () => {
       openFiltersModalAndLoad();
     });
 
+    // --- handlers específicos do modal de filtros / exportação ---
+    (function(){
+      const modalId = 'modal-filtros-entrada';
+
+      function $id(id){ return document.getElementById(id) || null; }
+
+      function closeFiltersModal() {
+        const modal = $id(modalId);
+        if (!modal) return;
+        modal.classList.remove('show');
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+
+        // remove handler de ESC (se registrado)
+        if (modal._escHandler) {
+          document.removeEventListener('keydown', modal._escHandler, true);
+          modal._escHandler = null;
+        }
+      }
+
+      function bindFiltersModalControls() {
+        const modal = $id(modalId);
+        if (!modal) return;
+
+        // 1) botao "x" / close dentro do modal — tenta varios seletores comuns
+        if (!modal._closeBound) {
+          const closeBtn = modal.querySelector('[data-dismiss="modal"], .modal-close, .close, .btn-close, .fechar-modal, .feather-x');
+          if (closeBtn) {
+            closeBtn.addEventListener('click', function(ev){
+              ev.preventDefault();
+              closeFiltersModal();
+            });
+          } else {
+            // se não encontrou o botão, faz um listener geral para elementos com data-action="close"
+            modal.addEventListener('click', function(ev){
+              const btn = ev.target.closest ? ev.target.closest('[data-action="close"]') : null;
+              if (btn) { ev.preventDefault(); closeFiltersModal(); }
+            });
+          }
+          modal._closeBound = true;
+        }
+
+        // 2) click no overlay (clicar fora do conteúdo fecha o modal)
+        if (!modal._overlayBound) {
+          modal.addEventListener('click', function(ev){
+            // fecha apenas se o clique foi no próprio backdrop (elemento modal), não em um filho
+            if (ev.target === modal) closeFiltersModal();
+          });
+          modal._overlayBound = true;
+        }
+
+        // 3) ESC: registrar um handler que captura o evento (use capture:true para interceptar antes dos outros)
+        if (!modal._escBound) {
+          const escHandler = function(ev){
+            const isEsc = ev.key === 'Escape' || ev.key === 'Esc';
+            if (!isEsc) return;
+            // apenas fecha se o modal estiver visível
+            if (modal.classList.contains('show') || modal.style.display === 'flex' || modal.style.display === 'block') {
+              ev.preventDefault();
+              ev.stopImmediatePropagation ? ev.stopImmediatePropagation() : ev.stopPropagation();
+              closeFiltersModal();
+            }
+          };
+          // registra com capture = true para interceptar antes de outros handlers que possam fechar outro modal
+          document.addEventListener('keydown', escHandler, true);
+          modal._escHandler = escHandler;
+          modal._escBound = true;
+        }
+      }
+
+      // expõe para que openFiltersModalAndLoad possa chamar após mostrar o modal
+      window.bindFiltersModalControls = bindFiltersModalControls;
+      window.closeFiltersModal = closeFiltersModal;
+    })();
     window.loadEntradasIntoModal = loadEntradasIntoModal;
   })();
 

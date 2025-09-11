@@ -1,3 +1,4 @@
+<!-- ENTRADAS - Modal principal (lista) -->
 <div id="modal-entradas" class="modal show">
   <div class="modal-content">
 
@@ -12,11 +13,11 @@
         <button type="button" id="searchEntradaBtn" class="btn btn-secondary">🔍</button>
       </div>
 
-      <!-- botões de ação: Exportar / Importar -->
       <div class="actions">
-        <button id="btnExportEntrada" class="btn btn-sm btn-secondary">Exportar</button>
+        <!-- abre modal de filtros -->
+        <button id="btnExportEntrada" class="btn btn-sm btn-secondary" title="Exportar (Shift+Click = PDF direto)">Exportar</button>
 
-        <!-- Apenas o botão que abre o modal de import -->
+        <!-- abre modal de import -->
         <button id="btnImportEntrada" class="btn btn-sm btn-secondary" type="button">Importar</button>
       </div>
     </div>
@@ -31,28 +32,26 @@
               <th>NF</th>
               <th>Fornecedor</th>
 
-              {# Materiais (todos primeiro) #}
-              {% for i in range(1, max_materiais + 1) %}
+              {# Materiais dinâmicos #}
+              {% for i in range(1, (max_materiais or 0) + 1) %}
                 <th>Material {{ i }}</th>
               {% endfor %}
 
-              {# Colunas fixas entre materiais e valores unitários #}
               <th>Produto</th>
               <th>Custo R$</th>
               <th>IPI %</th>
               <th>Valor Integral</th>
 
-              {# Valores unitários (após as colunas fixas) #}
-              {% for i in range(1, max_materiais + 1) %}
+              {# Valores unitários (use max_valores independentemente de max_materiais) #}
+              {% for i in range(1, (max_valores or 0) + 1) %}
                 <th>Valor Unit. {{ i }}</th>
               {% endfor %}
 
-              {# Duplicatas #}
-              {% for j in range(1, max_duplicatas + 1) %}
+              {# Duplicatas dinâmicas #}
+              {% for j in range(1, (max_duplicatas or 0) + 1) %}
                 <th>Duplicata {{ j }}</th>
               {% endfor %}
 
-              {# Últimas colunas fixas #}
               <th>Valor Unit. Energia</th>
               <th>Valor M.O.</th>
               <th>Peso Liq.</th>
@@ -64,47 +63,65 @@
           <tbody>
             {% for e in entradas %}
               <tr>
-                <td data-col="select">
-                  <input type="checkbox" class="selectEntrada" data-id="{{ e.id }}" />
-                </td>
+                <td data-col="select"><input type="checkbox" class="selectEntrada" data-id="{{ e.id }}" /></td>
                 <td data-col="data">{{ e.data }}</td>
                 <td data-col="nf">{{ e.nf }}</td>
                 <td data-col="fornecedor">{{ e.fornecedor }}</td>
 
-                {# Materiais 1..N (nome) #}
-                {% for i in range(0, max_materiais) %}
-                  <td data-col="material_{{ i+1 }}">
-                    {% if e.materiais and e.materiais|length > i and e.materiais[i].nome %}
-                      {{ e.materiais[i].nome }}
+                {# Materiais: prefira campos material_X (se existirem), senão lista e.materiais #}
+                {% for i in range(1, (max_materiais or 0) + 1) %}
+                  <td data-col="material_{{ i }}">
+                    {% set mat_col = (e['material_' ~ i] if (e['material_' ~ i] is defined) else None) %}
+                    {% if mat_col is not none and mat_col != '' %}
+                      {{ mat_col }}
+                    {% elif e.materiais and e.materiais|length >= i and e.materiais[i-1].nome is not none %}
+                      {{ e.materiais[i-1].nome }}
+                    {% else %}
+                      {{ '' }}
                     {% endif %}
                   </td>
                 {% endfor %}
 
-                {# Colunas fixas #}
                 <td data-col="produto">{{ e.produto }}</td>
                 <td data-col="custo_empresa">{{ e.custo_empresa|money }}</td>
                 <td data-col="ipi">{{ e.ipi|percent }}</td>
                 <td data-col="valor_integral">{{ e.valor_integral|money }}</td>
 
-                {# Valores unitários 1..N #}
-                {% for i in range(0, max_materiais) %}
-                  <td data-col="valor_unitario_{{ i+1 }}">
-                    {% if e.materiais and e.materiais|length > i and e.materiais[i].valor_unitario is not none %}
-                      {{ e.materiais[i].valor_unitario|money }}
+                {# Valores unitários: primeiro tenta e.materiais[i-1].valor_unitario (permite mostrar 0.00),
+                  senão usa coluna valor_unitario_X se existir #}
+                {% for i in range(1, (max_valores or 0) + 1) %}
+                  <td data-col="valor_unitario_{{ i }}">
+                    {% set shown = False %}
+                    {% if e.materiais and e.materiais|length >= i %}
+                      {% set vmat = e.materiais[i-1].valor_unitario %}
+                      {% if vmat is not none %}
+                        {{ vmat|money }}
+                        {% set shown = True %}
+                      {% endif %}
+                    {% endif %}
+                    {% if not shown %}
+                      {% if (e['valor_unitario_' ~ i] is defined) and (e['valor_unitario_' ~ i] is not none) %}
+                        {{ e['valor_unitario_' ~ i]|money }}
+                      {% else %}
+                        {{ '' }}
+                      {% endif %}
                     {% endif %}
                   </td>
                 {% endfor %}
 
-                {# Duplicatas 1..N #}
-                {% for j in range(0, max_duplicatas) %}
-                  <td data-col="duplicata_{{ j+1 }}">
-                    {% if e.duplicatas and e.duplicatas|length > j and e.duplicatas[j] is not none %}
-                      {{ e.duplicatas[j]|money }}
+                {# Duplicatas: prefira lista e.duplicatas[...] #}
+                {% for j in range(1, (max_duplicatas or 0) + 1) %}
+                  <td data-col="duplicata_{{ j }}">
+                    {% if e.duplicatas and e.duplicatas|length >= j and e.duplicatas[j-1] is not none %}
+                      {{ e.duplicatas[j-1]|money }}
+                    {% elif (e['duplicata_' ~ j] is defined) and (e['duplicata_' ~ j] is not none) %}
+                      {{ e['duplicata_' ~ j]|money }}
+                    {% else %}
+                      {{ '' }}
                     {% endif %}
                   </td>
                 {% endfor %}
 
-                {# Últimas colunas #}
                 <td data-col="valor_unitario_energia">{{ e.valor_unitario_energia|money }}</td>
                 <td data-col="valor_mao_obra_tm_metallica">{{ e.valor_mao_obra_tm_metallica|money }}</td>
                 <td data-col="peso_liquido">{{ e.peso_liquido|peso }}</td>
@@ -116,40 +133,101 @@
                 </td>
               </tr>
             {% else %}
-              <tr>
-                <td colspan="{{ 13 + (max_materiais * 2) + max_duplicatas }}" class="no-data">
-                  Nenhuma entrada encontrada.
-                </td>
-              </tr>
+              {% set total_cols = 13 + (max_materiais or 0) + (max_valores or 0) + (max_duplicatas or 0) %}
+              <tr><td colspan="{{ total_cols }}" class="no-data">Nenhuma entrada encontrada.</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
     </div>
 
+    <!-- MODAL DE FILTROS (Entrada NF) -->
+    <div id="modal-filtros-entrada" class="modal" aria-hidden="true" style="display:none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Exportar — Entradas</h3>
+          <button id="fecharModalFiltrosEntrada" class="close" type="button" aria-label="Fechar">&times;</button>
+        </div>
+
+        <form id="form-filtros-entrada" class="modal-body" action="#" onsubmit="return false;">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Data Início:</label>
+              <input type="date" name="data_de" />
+            </div>
+
+            <div class="form-group">
+              <label>Data Fim:</label>
+              <input type="date" name="data_ate" />
+            </div>
+
+            <div class="form-group">
+              <label>NF:</label>
+              <input type="text" name="numero_nf" placeholder="Número NF" />
+            </div>
+
+            <div class="form-group">
+              <label>Fornecedor:</label>
+              <input type="text" name="fornecedor" placeholder="Fornecedor" />
+            </div>
+
+            <div class="form-group">
+              <label>Produto:</label>
+              <input type="text" name="produto_nome" placeholder="Produto" />
+            </div>
+
+            <div class="form-group">
+              <label>Material 1:</label>
+              <input type="text" name="material_1" placeholder="Material 1" />
+            </div>
+
+            <div class="form-group">
+              <label>Material 2:</label>
+              <input type="text" name="material_2" placeholder="Material 2" />
+            </div>
+
+            <div class="form-group">
+              <label>Material 3:</label>
+              <input type="text" name="material_3" placeholder="Material 3" />
+            </div>
+
+            <div class="form-group">
+              <label>Material 4:</label>
+              <input type="text" name="material_4" placeholder="Material 4" />
+            </div>
+
+            <div class="form-group">
+              <label>Material 5:</label>
+              <input type="text" name="material_5" placeholder="Material 5" />
+            </div>
+          </div>
+
+          <input type="hidden" name="q" id="filtros-entrada-q" value="">
+
+          <div class="modal-footer" style="text-align:right; margin-top:1em;">
+            <button type="button" id="btnExportEntradaExcel" class="btn btn-primary btn-sm">Exportar Excel</button>
+            <button type="button" id="btnExportEntradaPdf" class="btn btn-primary btn-sm">Exportar PDF</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Modal de Importação Excel (Entrada NF) -->
     <div id="modal-import-entrada" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalImportEntradasTitle" tabindex="-1" style="display:none;">
       <div class="modal-content">
-        
-        <!-- Cabeçalho -->
         <div class="modal-header">
           <h3 id="modalImportEntradasTitle">Importar Excel — Entradas</h3>
           <button id="importClose" class="close" type="button" aria-label="Fechar import">&times;</button>
         </div>
 
-        <!-- Formulário -->
         <form id="form-import-excel" action="/entrada_nf/importar_excel" method="post" enctype="multipart/form-data">
           <div class="modal-body">
             <p>Selecione o arquivo Excel (.xls ou .xlsx).</p>
-
             <div>
               <label for="arquivo_excel">Arquivo Excel</label>
-              <input type="file" name="arquivo_excel" id="arquivo_excel"
-                    accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    required>
+              <input type="file" name="arquivo_excel" id="arquivo_excel" accept=".xls,.xlsx" required>
             </div>
 
-            <!-- Barra de progresso CUSTOMIZADA -->
             <div id="progressContainer" style="display:none; margin-top:10px;">
               <div style="background:#eee; height:12px; width:100%; border-radius:6px; overflow:hidden;">
                 <div id="progressBar" style="width:0%; height:100%; background:#007bff; transition:width 0.3s;"></div>
@@ -157,13 +235,11 @@
               <div id="progressText" style="margin-top:6px; font-size:12px; text-align:center; color:#444;">0%</div>
             </div>
 
-            <!-- Mensagem de retorno -->
             <div id="importMessage" style="display:none; margin-top:10px;">
               <div id="importMsgText"></div>
             </div>
           </div>
 
-          <!-- Rodapé com botões -->
           <div class="modal-footer" style="padding: 12px;">
             <button type="button" id="cancelImport" class="btn">Cancelar</button>
             <button type="submit" class="btn btn-primary">Enviar</button>

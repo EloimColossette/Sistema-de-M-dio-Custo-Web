@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify, current_app as app
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify, send_file, current_app as app
 from routes.auth_routes import login_required
 from conexao_db import conectar
 from datetime import datetime
@@ -7,6 +7,9 @@ from werkzeug.utils import secure_filename
 import pandas as pd
 from psycopg2.extras import execute_values
 import re
+from io import BytesIO
+import pandas as pd
+import html
 
 # Blueprint para Entrada de Nota Fiscal
 entrada_nf_bp = Blueprint('entrada_nf', __name__, url_prefix='/entrada_nf')
@@ -215,14 +218,37 @@ def nova_entrada():
 
         # calcula máximos observados nas entradas desta página
         max_materiais = 0
+        max_valores = 0
         max_duplicatas = 0
+
         for e in entradas:
+            # materiais (lista construída por _linha_para_entrada)
             if isinstance(e.get('materiais'), list):
                 max_materiais = max(max_materiais, len(e['materiais']))
+
+            # valores unitários (1..MAX_MATERIAIS_DB) - checa colunas e fallback em materiais[]
+            for i in range(1, MAX_MATERIAIS_DB + 1):
+                vu_col = e.get(f'valor_unitario_{i}')
+                vu_fallback = None
+                try:
+                    if isinstance(e.get('materiais'), list) and len(e['materiais']) >= i:
+                        vu_fallback = e['materiais'][i-1].get('valor_unitario')
+                except Exception:
+                    vu_fallback = None
+                if vu_col not in (None, '') or (vu_fallback not in (None, '') and vu_fallback is not None):
+                    max_valores = max(max_valores, i)
+
+            # duplicatas: tanto colunas duplicata_X quanto lista duplicatas[]
             if isinstance(e.get('duplicatas'), list):
                 max_duplicatas = max(max_duplicatas, len(e['duplicatas']))
+            for j in range(1, MAX_DUPLICATAS_DB + 1):
+                d_col = e.get(f'duplicata_{j}')
+                if d_col not in (None, '', 0):
+                    max_duplicatas = max(max_duplicatas, j)
 
+        # limita ao máximo físico do DB
         max_materiais = min(max_materiais or 0, MAX_MATERIAIS_DB)
+        max_valores = min(max_valores or 0, MAX_MATERIAIS_DB)
         max_duplicatas = min(max_duplicatas or 0, MAX_DUPLICATAS_DB)
 
         cursor.execute("SELECT COUNT(*) FROM entrada_nf")
@@ -242,6 +268,7 @@ def nova_entrada():
         page=page,
         total_pages=total_pages,
         max_materiais=max_materiais,
+        max_valores=max_valores,
         max_duplicatas=max_duplicatas
     )
 
@@ -861,10 +888,35 @@ def listar_entradas():
 
         entradas = [_linha_para_entrada(l) for l in linhas]
 
-        max_materiais = max((len(e['materiais']) for e in entradas if isinstance(e.get('materiais'), list)), default=0)
-        max_duplicatas = max((len(e['duplicatas']) for e in entradas if isinstance(e.get('duplicatas'), list)), default=0)
+        # calcula máximos observados nas entradas desta página
+        max_materiais = 0
+        max_valores = 0
+        max_duplicatas = 0
+
+        for e in entradas:
+            if isinstance(e.get('materiais'), list):
+                max_materiais = max(max_materiais, len(e['materiais']))
+
+            for i in range(1, MAX_MATERIAIS_DB + 1):
+                vu_col = e.get(f'valor_unitario_{i}')
+                vu_fallback = None
+                try:
+                    if isinstance(e.get('materiais'), list) and len(e['materiais']) >= i:
+                        vu_fallback = e['materiais'][i-1].get('valor_unitario')
+                except Exception:
+                    vu_fallback = None
+                if vu_col not in (None, '') or (vu_fallback not in (None, '') and vu_fallback is not None):
+                    max_valores = max(max_valores, i)
+
+            if isinstance(e.get('duplicatas'), list):
+                max_duplicatas = max(max_duplicatas, len(e['duplicatas']))
+            for j in range(1, MAX_DUPLICATAS_DB + 1):
+                d_col = e.get(f'duplicata_{j}')
+                if d_col not in (None, '', 0):
+                    max_duplicatas = max(max_duplicatas, j)
 
         max_materiais = min(max_materiais, MAX_MATERIAIS_DB)
+        max_valores = min(max_valores, MAX_MATERIAIS_DB)
         max_duplicatas = min(max_duplicatas, MAX_DUPLICATAS_DB)
 
     finally:
@@ -877,6 +929,7 @@ def listar_entradas():
         page=page,
         total_pages=total_pages,
         max_materiais=max_materiais,
+        max_valores=max_valores,
         max_duplicatas=max_duplicatas
     )
 
@@ -1124,3 +1177,381 @@ def importar_excel_entrada():
 
     flash(f'Importação concluída. Inseridos: {inserted}. Falhas: {len(errors)}', 'success')
     return redirect(url_for('entrada_nf.entradas_nf'))
+
+@entrada_nf_bp.route('/exportar_filtrado')
+@login_required
+def exportar_filtrado():
+    import datetime as dt  # evita conflito se houver "from datetime import datetime" em outro lugar
+    from io import BytesIO
+
+    tipo = (request.args.get('tipo') or 'excel').lower()
+    q = (request.args.get('q') or '').strip()
+    data_de = (request.args.get('data_de') or '').strip()
+    data_ate = (request.args.get('data_ate') or '').strip()
+    numero_nf = (request.args.get('numero_nf') or '').strip()
+    fornecedor = (request.args.get('fornecedor') or '').strip()
+    produto_nome = (request.args.get('produto_nome') or '').strip()
+
+    def parse_date_try(s):
+        if not s:
+            return None
+        s = s.strip()
+        try:
+            if '/' in s:
+                return dt.datetime.strptime(s, '%d/%m/%Y').date()
+            return dt.datetime.strptime(s, '%Y-%m-%d').date()
+        except Exception:
+            try:
+                pd_dt = pd.to_datetime(s, dayfirst=True, errors='coerce')
+                return None if pd.isna(pd_dt) else pd_dt.date()
+            except Exception:
+                return None
+
+    where = []
+    params = []
+
+    iso_q = ''
+    if q:
+        try:
+            if '/' in q and len(q.split('/')) == 3:
+                d = parse_date_try(q)
+                if d:
+                    iso_q = d.isoformat()
+        except Exception:
+            iso_q = ''
+
+    if iso_q:
+        where.append("data::text = %s")
+        params.append(iso_q)
+    else:
+        if q:
+            like = f"%{q}%"
+            where.append("(" + " OR ".join([
+                "unaccent(nf::text) ILIKE unaccent(%s)",
+                "unaccent(fornecedor::text) ILIKE unaccent(%s)",
+                "unaccent(produto::text) ILIKE unaccent(%s)",
+                "unaccent(material_1::text) ILIKE unaccent(%s)",
+                "unaccent(material_2::text) ILIKE unaccent(%s)",
+                "unaccent(material_3::text) ILIKE unaccent(%s)",
+                "unaccent(material_4::text) ILIKE unaccent(%s)",
+                "unaccent(material_5::text) ILIKE unaccent(%s)"
+            ]) + ")")
+            params.extend([like]*8)
+
+    if numero_nf:
+        where.append("nf::text = %s")
+        params.append(numero_nf)
+
+    if fornecedor:
+        where.append("fornecedor ILIKE %s")
+        params.append(f"%{fornecedor}%")
+
+    if produto_nome:
+        where.append("produto ILIKE %s")
+        params.append(f"%{produto_nome}%")
+
+    d_from = parse_date_try(data_de)
+    d_to = parse_date_try(data_ate)
+    if d_from:
+        where.append("data >= %s")
+        params.append(d_from)
+    if d_to:
+        where.append("data <= %s")
+        params.append(d_to)
+
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+
+    sql = f"""
+        SELECT
+            id,
+            data, nf, fornecedor,
+            material_1, material_2, material_3, material_4, material_5,
+            produto, custo_empresa, ipi, valor_integral,
+            valor_unitario_1, valor_unitario_2, valor_unitario_3,
+            valor_unitario_4, valor_unitario_5,
+            duplicata_1, duplicata_2, duplicata_3,
+            duplicata_4, duplicata_5, duplicata_6,
+            valor_unitario_energia, valor_mao_obra_tm_metallica,
+            peso_liquido, peso_integral
+        FROM entrada_nf
+        {where_sql}
+        ORDER BY data DESC, nf DESC
+    """
+
+    conn = None
+    cur = None
+    try:
+        conn = conectar()
+        cur = conn.cursor()
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall() or []
+
+        records = []
+        for r in rows:
+            mapped = _linha_para_entrada(r)
+            data_str = mapped.get('data')
+            try:
+                if data_str:
+                    mapped['data'] = dt.datetime.strptime(data_str, '%d/%m/%Y').date()
+                else:
+                    mapped['data'] = None
+            except Exception:
+                mapped['data'] = mapped.get('data')
+            for i in range(5):
+                if isinstance(mapped.get('materiais'), list) and len(mapped['materiais']) > i:
+                    mapped[f"material_{i+1}"] = mapped['materiais'][i].get('nome')
+                    mapped[f"valor_unitario_{i+1}"] = mapped['materiais'][i].get('valor_unitario')
+                else:
+                    mapped[f"material_{i+1}"] = None
+                    mapped[f"valor_unitario_{i+1}"] = None
+            for j in range(6):
+                mapped[f"duplicata_{j+1}"] = mapped['duplicatas'][j] if (isinstance(mapped.get('duplicatas'), list) and len(mapped['duplicatas']) > j) else None
+
+            records.append(mapped)
+
+        cols = [
+            ('data', 'Data'),
+            ('nf', 'NF'),
+            ('fornecedor', 'Fornecedor'),
+            ('material_1', 'Material 1'),
+            ('material_2', 'Material 2'),
+            ('material_3', 'Material 3'),
+            ('material_4', 'Material 4'),
+            ('material_5', 'Material 5'),
+            ('produto', 'Produto'),
+            ('custo_empresa', 'Custo R$'),
+            ('ipi', 'IPI %'),
+            ('valor_integral', 'Valor Integral'),
+            ('valor_unitario_1', 'Valor Unit. 1'),
+            ('valor_unitario_2', 'Valor Unit. 2'),
+            ('valor_unitario_3', 'Valor Unit. 3'),
+            ('valor_unitario_4', 'Valor Unit. 4'),
+            ('valor_unitario_5', 'Valor Unit. 5'),
+            ('duplicata_1', 'Duplicata 1'),
+            ('duplicata_2', 'Duplicata 2'),
+            ('duplicata_3', 'Duplicata 3'),
+            ('duplicata_4', 'Duplicata 4'),
+            ('duplicata_5', 'Duplicata 5'),
+            ('duplicata_6', 'Duplicata 6'),
+            ('valor_unitario_energia', 'Valor Unit. Energia'),
+            ('valor_mao_obra_tm_metallica', 'Valor M.O.'),
+            ('peso_liquido', 'Peso Liq.'),
+            ('peso_integral', 'Peso Int.')
+        ]
+
+        df_rows = []
+        for rec in records:
+            row = {}
+            for k, label in cols:
+                if k == 'ipi' and rec.get('ipi') is not None:
+                    ipi_val = rec.get('ipi')
+                    row[label] = (ipi_val * 100) if (isinstance(ipi_val, float) and ipi_val <= 1) else ipi_val
+                else:
+                    row[label] = rec.get(k)
+            df_rows.append(row)
+
+        df = pd.DataFrame(df_rows, columns=[label for _, label in cols])
+
+        timestamp = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
+        base_name = f"entradas_export_{timestamp}"
+
+        # Excel (padrão)
+        if tipo != 'pdf':
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='Entradas', index=False)
+            output.seek(0)
+            return send_file(
+                output,
+                as_attachment=True,
+                download_name=f"{base_name}.xlsx",
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+
+        # -----------------------------
+        # GERAÇÃO DE PDF COM REPORTLAB (melhor legibilidade)
+        # -----------------------------
+        try:
+            # imports locais
+            from reportlab.lib.pagesizes import A4, A3, landscape
+            from reportlab.lib import colors
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import mm
+            from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+            from xml.sax.saxutils import escape as xml_escape
+
+            # Decide página: se muitas colunas, usa A3 paisagem
+            original_headers = [label for _, label in cols]
+            n_cols = len(original_headers)
+            use_a3 = n_cols > 12  # limiar ajustável
+            page_size = landscape(A3) if use_a3 else landscape(A4)
+            page_width = page_size[0]
+            # margem
+            margin_mm = 10
+            usable_width = page_width - (2 * margin_mm * mm)
+
+            buf = BytesIO()
+            doc = SimpleDocTemplate(buf, pagesize=page_size,
+                                    leftMargin=margin_mm*mm, rightMargin=margin_mm*mm,
+                                    topMargin=10*mm, bottomMargin=10*mm)
+            story = []
+            styles = getSampleStyleSheet()
+            # estilos
+            header_style = ParagraphStyle('h', parent=styles['Heading4'], alignment=TA_CENTER, fontSize=9, leading=10)
+            text_style = ParagraphStyle('t', parent=styles['Normal'], alignment=TA_LEFT, fontSize=8, leading=9)
+            small_text_style = ParagraphStyle('ts', parent=styles['Normal'], alignment=TA_LEFT, fontSize=7, leading=8)
+            number_style = ParagraphStyle('n', parent=styles['Normal'], alignment=TA_RIGHT, fontSize=8, leading=9)
+
+            story.append(Paragraph("Entradas Exportadas", styles['Heading2']))
+            story.append(Spacer(1, 6))
+
+            # Retira colunas totalmente vazias (manutenção da ordem original)
+            def col_has_value(series):
+                if series is None:
+                    return False
+                for v in series:
+                    if v is None:
+                        continue
+                    try:
+                        if isinstance(v, float) and pd.isna(v):
+                            continue
+                    except Exception:
+                        pass
+                    s = str(v).strip().lower()
+                    if s not in ('', 'nan', 'none'):
+                        return True
+                return False
+
+            headers = []
+            for h in original_headers:
+                if h not in df.columns:
+                    continue
+                if col_has_value(df[h]):
+                    headers.append(h)
+            if not headers:
+                headers = original_headers.copy()
+
+            # calcula larguras baseadas em heurística (prioriza algumas colunas)
+            widths = []
+            for h in headers:
+                if h in ('Data', 'NF'):
+                    widths.append(30 * mm)
+                elif h in ('Fornecedor', 'Produto'):
+                    widths.append(55 * mm)
+                elif h.startswith('Material'):
+                    widths.append(45 * mm)
+                elif h.startswith('Duplicata'):
+                    widths.append(28 * mm)
+                elif h in ('Custo R$', 'Valor Integral', 'Valor Unit. Energia', 'Valor M.O.', 'Peso Liq.', 'Peso Int.'):
+                    widths.append(30 * mm)
+                else:
+                    widths.append(30 * mm)
+
+            # ajusta proporcionalmente se soma > usable_width
+            sum_w = sum(widths)
+            if sum_w > usable_width:
+                factor = usable_width / float(sum_w)
+                widths = [w * factor for w in widths]
+
+            # prepara table_data usando Paragraph (para quebra de linha)
+            table_data = []
+            # cabeçalho com Paragraphs
+            header_row = [Paragraph(xml_escape(h), header_style) for h in headers]
+            table_data.append(header_row)
+
+            # linhas
+            for _, r in df.iterrows():
+                row = []
+                for h in headers:
+                    v = r.get(h)
+                    if isinstance(v, (dt.date, dt.datetime)):
+                        text = v.strftime('%d/%m/%Y')
+                        p = Paragraph(xml_escape(text), text_style)
+                    elif isinstance(v, float):
+                        formatted = f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                        p = Paragraph(xml_escape(formatted), number_style)
+                    elif v is None or (isinstance(v, float) and pd.isna(v)):
+                        p = Paragraph('', text_style)
+                    else:
+                        s = str(v)
+                        # se muito longo, deixa o Paragraph quebrar naturalmente (vai ajustar altura)
+                        # usa estilo menor se texto muito comprido
+                        p = Paragraph(xml_escape(s), small_text_style if len(s) > 80 else text_style)
+                    row.append(p)
+                table_data.append(row)
+
+            # cria tabela
+            tbl = Table(table_data, colWidths=widths, repeatRows=1)
+            tbl_style = TableStyle([
+                ('GRID', (0,0), (-1,-1), 0.25, colors.HexColor('#BBBBBB')),
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F0F0F0')),
+                ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                ('FONTSIZE', (0,0), (-1,-1), 8),
+                ('LEFTPADDING', (0,0), (-1,-1), 4),
+                ('RIGHTPADDING', (0,0), (-1,-1), 4),
+            ])
+            # alinha numericas à direita (procura por alguns rótulos que indicam número)
+            numeric_labels = set(['Custo R$', 'IPI %', 'Valor Integral', 'Valor Unit. 1', 'Valor Unit. 2',
+                                  'Valor Unit. 3', 'Valor Unit. 4', 'Valor Unit. 5',
+                                  'Duplicata 1', 'Duplicata 2', 'Duplicata 3', 'Duplicata 4', 'Duplicata 5', 'Duplicata 6',
+                                  'Valor Unit. Energia', 'Valor M.O.', 'Peso Liq.', 'Peso Int.'])
+            for col_idx, h in enumerate(headers):
+                if h in numeric_labels or 'Valor' in h or 'Custo' in h or 'Peso' in h or h.startswith('Duplicata'):
+                    tbl_style.add('ALIGN', (col_idx, 1), (col_idx, -1), 'RIGHT')
+                else:
+                    tbl_style.add('ALIGN', (col_idx, 1), (col_idx, -1), 'LEFT')
+
+            tbl.setStyle(tbl_style)
+            story.append(tbl)
+
+            # renderiza PDF
+            doc.build(story)
+            buf.seek(0)
+            return send_file(
+                buf,
+                as_attachment=True,
+                download_name=f"{base_name}.pdf",
+                mimetype='application/pdf'
+            )
+
+        except ImportError as e:
+            # reportlab não instalado -> fallback Excel
+            print("reportlab não instalado:", e)
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='Entradas', index=False)
+            output.seek(0)
+            return send_file(
+                output,
+                as_attachment=True,
+                download_name=f"{base_name}_fallback.xlsx",
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+        except Exception as e:
+            # erro qualquer durante geração do PDF -> fallback Excel
+            print("Erro ao gerar PDF com reportlab:", e)
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='Entradas', index=False)
+            output.seek(0)
+            return send_file(
+                output,
+                as_attachment=True,
+                download_name=f"{base_name}_fallback.xlsx",
+                mimetype='application/vnd.openxmlformats-officedocument-spreadsheetml.sheet'
+            )
+
+    except Exception as exc:
+        print("Erro em exportar_filtrado:", exc)
+        flash("Erro ao gerar exportação.", "danger")
+        return redirect(url_for('entrada_nf.nova_entrada'))
+    finally:
+        try:
+            if cur: cur.close()
+        except:
+            pass
+        try:
+            if conn: conn.close()
+        except:
+            pass

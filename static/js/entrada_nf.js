@@ -4,11 +4,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectedIds = window.selectedIds;
   window._entradaSelectedAllPages = window._entradaSelectedAllPages || false;
   window.currentEntradaPage = window.currentEntradaPage || 1;
-
-  // evita quebra se variável não definida externamente
   window.materiaisOptions = window.materiaisOptions || [];
 
   console.log('Materiais disponíveis:', window.materiaisOptions);
+
 
   // --- Persistência de colunas ocultas ---
   const STORAGE_KEY = 'entrada_nf_colunas_ocultas';
@@ -675,6 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try { setupFixedHScrollImproved(); } catch(e) {}
 
       if (typeof window.initEntradaImport === 'function') window.initEntradaImport();
+      if (typeof window.initEntradaExport === 'function') window.initEntradaExport();
 
     } catch (err) {
       console.error(err);
@@ -1347,37 +1347,136 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   })();
 
-  // --- EXPORTAÇÃO FILTRADA (Entrada NF) ---
-  // Comportamento: clique normal => EXCEL (CSV).
-  // Se clicar segurando Shift => PDF (se implementado no backend).
-  (function () {
-    function exportarEntrada(params) {
-      const qs = (params instanceof URLSearchParams)
-        ? params.toString()
-        : (new URLSearchParams(params)).toString();
-      window.location = `/entrada_nf/exportar_filtrado?${qs}`;
-    }
+  // ---------- FUNÇÃO DE EXPORTAÇÃO ----------
+  window.initEntradaExport = function() {
+    console.log('Inicializando exportação de entradas…');
 
-    const btnExport = document.getElementById('btnExportEntrada');
-    if (btnExport) {
-      btnExport.addEventListener('click', (e) => {
-        let q = '';
-        try {
-          const modalSearch = document.querySelector('#modal-entradas #searchEntradaInput');
-          if (modalSearch && modalSearch.value) q = modalSearch.value.trim();
-        } catch (err) { q = ''; }
+    const btnExcel = document.getElementById('btnExportEntradaExcel');
+    const btnPdf = document.getElementById('btnExportEntradaPdf');
+    const form = document.getElementById('form-filtros-entrada');
 
-        const params = new URLSearchParams();
-        if (q) params.append('q', q);
-
-        const tipo = e.shiftKey ? 'pdf' : 'excel';
-        params.append('tipo', tipo);
-
-        exportarEntrada(params);
+    if(btnExcel) {
+      btnExcel.addEventListener('click', function() {
+        const params = new URLSearchParams(new FormData(form)).toString();
+        window.open(`/entrada_nf/exportar_filtrado?tipo=excel&${params}`, '_blank');
       });
     }
+
+    if(btnPdf) {
+      btnPdf.addEventListener('click', function() {
+        const params = new URLSearchParams(new FormData(form)).toString();
+        window.open(`/entrada_nf/exportar_filtrado?tipo=pdf&${params}`, '_blank');
+      });
+    }
+  };
+
+  // ---------- FUNÇÕES DO MODAL DE LISTAGEM (AJAX) ----------
+  (function(){
+    if (window.__entradaListAjaxInit) return;
+    window.__entradaListAjaxInit = true;
+
+    function $id(id){ return document.getElementById(id) || null; }
+    function qsel(sel, root){ return (root || document).querySelector(sel); }
+    function qselAll(sel, root){ return Array.from((root || document).querySelectorAll(sel)); }
+
+    async function loadEntradasIntoModal(opts = {}) {
+      const modal = $id('modal-entradas');
+      if (!modal) return;
+
+      let container = qsel('.table-container', modal) || qsel('.table-container');
+      if (!container) return;
+
+      const params = new URLSearchParams();
+      if(opts.page) params.append('page', opts.page);
+      if(opts.search) params.append('search', opts.search);
+      params.append('_', Date.now());
+
+      try {
+        container.innerHTML = '<div style="padding:1rem">Carregando entradas…</div>';
+        const resp = await fetch('/entrada_nf/listar?' + params.toString(), {
+          method: 'GET',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        if(!resp.ok) throw new Error('Erro ao buscar listagem');
+        const html = await resp.text();
+
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html.trim();
+        const newContainer = tmp.querySelector('.table-container');
+        if(newContainer) container.replaceWith(newContainer);
+        else container.innerHTML = html;
+
+        attachModalPaginationHandlers();
+      } catch(err) {
+        console.error('loadEntradasIntoModal error:', err);
+        container.innerHTML = '<div style="padding:1rem;color:#900">Falha ao carregar entradas.</div>';
+      }
+    }
+
+    function attachModalPaginationHandlers() {
+      const modal = $id('modal-entradas');
+      if(!modal) return;
+
+      if(!modal._pagBound){
+        modal._pagBound = true;
+        modal.addEventListener('click', function(ev){
+          const a = ev.target.closest ? ev.target.closest('.page-btn') : null;
+          if(!a) return;
+          ev.preventDefault();
+          const page = a.dataset.page || 1;
+          const searchInput = $id('searchEntradaInput');
+          const q = searchInput && searchInput.value ? searchInput.value.trim() : '';
+          loadEntradasIntoModal({ page: page, search: q });
+        });
+      }
+
+      const searchInput = $id('searchEntradaInput');
+      if(searchInput && !searchInput._enterBound){
+        searchInput._enterBound = true;
+        searchInput.addEventListener('keydown', function(ev){
+          if(ev.key === 'Enter'){
+            ev.preventDefault();
+            const q = (searchInput.value || '').trim();
+            loadEntradasIntoModal({ page: 1, search: q });
+          }
+        });
+      }
+
+      const searchBtn = $id('searchEntradaBtn');
+      if(searchBtn && !searchBtn._bound){
+        searchBtn._bound = true;
+        searchBtn.addEventListener('click', function(ev){
+          ev.preventDefault();
+          const q = ($id('searchEntradaInput').value || '').trim();
+          loadEntradasIntoModal({ page: 1, search: q });
+        });
+      }
+    }
+
+    function openFiltersModalAndLoad() {
+      const modalFiltros = $id('modal-filtros-entrada');
+      if(!modalFiltros) return;
+
+      modalFiltros.classList.add('show');
+      modalFiltros.style.display = 'flex';
+      modalFiltros.setAttribute('aria-hidden', 'false');
+
+      const q = ($id('searchEntradaInput') && $id('searchEntradaInput').value) ? $id('searchEntradaInput').value.trim() : '';
+      loadEntradasIntoModal({ page: 1, search: q });
+    }
+
+    document.addEventListener('click', function(ev){
+      const el = ev.target.closest ? ev.target.closest('#btnExportEntrada') : null;
+      if(!el) return;
+      ev.preventDefault();
+      openFiltersModalAndLoad();
+    });
+
+    window.loadEntradasIntoModal = loadEntradasIntoModal;
   })();
 
+  // ---------- EXECUTA INIT DE EXPORTAÇÃO ----------
+  initEntradaExport();
 
   // --- Import Modal (Entrada NF) ---
   (function () {

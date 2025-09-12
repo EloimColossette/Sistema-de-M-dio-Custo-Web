@@ -501,40 +501,47 @@ def editar_entrada(id):
 
     for col, raw_val in fields.items():
         if col not in ALLOWED:
-            # ignora colunas não permitidas
             print(f"[editar_entrada] coluna ignorada (não permitida): {col}")
             continue
 
-        # tratamento por tipo
+        # Se o cliente explicitamente mandou null, armazenamos NULL no banco
+        if raw_val is None:
+            val = None
+            cols.append(f"{col} = %s")
+            params.append(val)
+            continue
+
+        # Se enviar string vazia, tratamos como NULL também (opcional — ajuste se quiser 0)
+        if isinstance(raw_val, str) and raw_val.strip() == '':
+            val = None
+            cols.append(f"{col} = %s")
+            params.append(val)
+            continue
+
+        # Agora raw_val é não-nulo e não-vazio -> processar por tipo
         try:
             if col == 'data':
                 try:
                     d = parse_date_like(raw_val)
-                    # armazena como date (ou None)
                     val = None if d is None else d
                 except Exception:
                     return jsonify({"status": "error", "msg": f"Data inválida para '{col}': {raw_val}"}), 400
 
             elif any(k in col for k in ('valor', 'custo', 'valor_unitario', 'duplicata', 'peso')) or col == 'ipi':
-                # numéricos: trata com parser robusto
+                # numeric fields: parse only quando raw_val não for None/'' (já tratado acima)
                 try:
                     f = parse_numeric_like(raw_val, col_name=col)
                 except ValueError:
                     return jsonify({"status": "error", "msg": f"Valor numérico inválido para '{col}': {raw_val}"}), 400
 
-                # tratamento especial para IPI: se estiver configurado para salvar como fração,
-                # convertendo 3.25 -> 0.0325. Se já estiver 0.0325, o valor fica intacto.
                 if col == 'ipi' and STORE_IPI_AS_FRACTION:
                     if f > 1 and f <= 100:
                         f = f / 100.0
                 val = f
 
             else:
-                # texto / nullable
-                if raw_val == '':
-                    val = None
-                else:
-                    val = raw_val
+                # texto / nullable (raw_val não é vazio nem None aqui)
+                val = raw_val
         except Exception as e:
             print("Erro ao interpretar campo:", col, raw_val, e)
             return jsonify({"status": "error", "msg": f"Erro ao interpretar campo '{col}'."}), 400
@@ -670,7 +677,6 @@ def api_produtos_list():
     cur.close()
     conn.close()
     return jsonify(data)
-
 
 @entrada_nf_bp.route('/ids_all', methods=['POST'])
 @login_required
@@ -850,48 +856,58 @@ def excluir_entradas():
 def listar_entradas():
     page = int(request.args.get('page', 1))
     per_page = 10
-    search = (request.args.get('search') or '').strip()
+    search = (request.args.get('search') or request.args.get('q_raw') or request.args.get('q') or '').strip()
 
     conexao = conectar()
     cursor = conexao.cursor()
     try:
         if search:
-            # Pré-processamento (igual saida_nf)
-            clean_search = re.sub(r'[.\-\/]', '', search)
-            like = f"%{search}%"
+            # mantém o que o usuário digitou e também cria um pattern com % para ILIKE
+            raw = (search or '').strip()
+            like = f"%{raw}%"
 
-            # Se for dd/mm/YYYY, converte para YYYY-MM-DD
+            # tenta interpretar como dd/mm/YYYY para comparação exata por date
+            data_iso = None
             try:
-                data_formatada = datetime.strptime(search, '%d/%m/%Y').strftime('%Y-%m-%d')
+                data_obj = datetime.strptime(raw, '%d/%m/%Y')
+                data_iso = data_obj.strftime('%Y-%m-%d')   # '2025-08-06'
             except Exception:
-                data_formatada = ''
+                data_iso = None
 
-            cursor.execute(
-                """
+            sql = """
                 SELECT id,
-                       data, nf, fornecedor,
-                       material_1, material_2, material_3, material_4, material_5,
-                       produto, custo_empresa, ipi, valor_integral,
-                       valor_unitario_1, valor_unitario_2, valor_unitario_3,
-                       valor_unitario_4, valor_unitario_5,
-                       duplicata_1, duplicata_2, duplicata_3,
-                       duplicata_4, duplicata_5, duplicata_6,
-                       valor_unitario_energia, valor_mao_obra_tm_metallica,
-                       peso_liquido, peso_integral
+                    data, nf, fornecedor,
+                    material_1, material_2, material_3, material_4, material_5,
+                    produto, custo_empresa, ipi, valor_integral,
+                    valor_unitario_1, valor_unitario_2, valor_unitario_3,
+                    valor_unitario_4, valor_unitario_5,
+                    duplicata_1, duplicata_2, duplicata_3,
+                    duplicata_4, duplicata_5, duplicata_6,
+                    valor_unitario_energia, valor_mao_obra_tm_metallica,
+                    peso_liquido, peso_integral
                 FROM entrada_nf
                 WHERE unaccent(nf::text)         ILIKE unaccent(%s)
-                   OR unaccent(fornecedor::text) ILIKE unaccent(%s)
-                   OR unaccent(produto::text)    ILIKE unaccent(%s)
-                   OR unaccent(material_1::text) ILIKE unaccent(%s)
-                   OR unaccent(material_2::text) ILIKE unaccent(%s)
-                   OR unaccent(material_3::text) ILIKE unaccent(%s)
-                   OR unaccent(material_4::text) ILIKE unaccent(%s)
-                   OR unaccent(material_5::text) ILIKE unaccent(%s)
-                   OR data::text = %s
+                OR unaccent(fornecedor::text) ILIKE unaccent(%s)
+                OR unaccent(produto::text)    ILIKE unaccent(%s)
+                OR unaccent(material_1::text) ILIKE unaccent(%s)
+                OR unaccent(material_2::text) ILIKE unaccent(%s)
+                OR unaccent(material_3::text) ILIKE unaccent(%s)
+                OR unaccent(material_4::text) ILIKE unaccent(%s)
+                OR unaccent(material_5::text) ILIKE unaccent(%s)
+                -- compara como date (só funciona se o usuário digitou a data completa)
+                OR (data::date = %s::date)
+                -- compara a data formatada DD/MM/YYYY com pattern (aceita buscas parciais '06/' '06/08' etc.)
+                OR (to_char(data, 'DD/MM/YYYY') ILIKE %s)
                 ORDER BY data DESC, nf DESC
-                """,
-                (like, like, like, like, like, like, like, like, data_formatada)
-            )
+            """
+
+            # montagem dos parâmetros: 8 vezes para os unaccent ILIKE, depois data_iso (pode ser None),
+            # depois o 'like' para a comparação to_char(... ) ILIKE %s
+            params = [like] * 8
+            params.append(data_iso)   # para data::date = %s::date (None se não for data completa)
+            params.append(like)       # para to_char(...) ILIKE %s (usa wildcard)
+
+            cursor.execute(sql, tuple(params))
             linhas = cursor.fetchall()
             total_pages = 1
             page = 1

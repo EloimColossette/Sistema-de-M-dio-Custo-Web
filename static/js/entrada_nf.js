@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window._entradaSelectedAllPages = window._entradaSelectedAllPages || false;
   window.currentEntradaPage = window.currentEntradaPage || 1;
   window.materiaisOptions = window.materiaisOptions || [];
+  window.ENTRADAS_PER_PAGE = window.ENTRADAS_PER_PAGE || 10;
 
   console.log('Materiais disponíveis:', window.materiaisOptions);
 
@@ -325,10 +326,54 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const btn = row ? row.querySelector('.btn-excluir') : null;
       if (btn) { btn.disabled = true; }
+
       const data = await doDeleteRequest([id]);
-      if (row && row.parentNode) row.parentNode.removeChild(row);
-      selectedIds.delete(String(id));
+
+      // tenta identificar IDs removidos a partir da resposta
+      let removedIds = [];
+      if (data && Array.isArray(data.removed_ids)) removedIds = data.removed_ids.map(String);
+      else if (data && typeof data.removed === 'number' && data.removed === 1) removedIds = [String(id)];
+      else {
+        // fallback seguro: recarrega a página para sincronizar
+        const curSearch = (modalContent && modalContent.querySelector('#searchEntradaInput')) ? modalContent.querySelector('#searchEntradaInput').value : '';
+        await loadPage(window.currentEntradaPage || 1, curSearch || '');
+        selectedIds.delete(String(id));
+        refreshBulkStateAndSelectAll();
+        alert('Excluído com sucesso.');
+        return;
+      }
+
+      // remove do DOM apenas os IDs confirmados
+      removedIds.forEach(rid => {
+        const cb = modalContent ? modalContent.querySelector(`.selectEntrada[data-id="${CSS.escape(String(rid))}"]`) : null;
+        if (cb) {
+          const rtr = cb.closest('tr');
+          if (rtr && rtr.parentNode) rtr.parentNode.removeChild(rtr);
+        }
+        selectedIds.delete(String(rid));
+      });
+
       refreshBulkStateAndSelectAll();
+
+      // Se a página ficou com menos que PER_PAGE linhas, recarrega para buscar próximas entradas
+      try {
+        const perPage = window.ENTRADAS_PER_PAGE || 10;
+        const allRows = modalContent ? Array.from(modalContent.querySelectorAll('tbody tr')) : [];
+        const visibleRows = allRows.filter(tr => !tr.classList.contains('no-data') && tr.querySelectorAll('td').length > 0);
+        const curPage = window.currentEntradaPage || 1;
+        const curSearch = (modalContent && modalContent.querySelector('#searchEntradaInput')) ? modalContent.querySelector('#searchEntradaInput').value : '';
+
+        if (visibleRows.length === 0 && curPage > 1) {
+          // se ficou vazia e não é a primeira página, vai para a página anterior
+          await loadPage(curPage - 1, curSearch || '');
+        } else if (visibleRows.length < perPage) {
+          // tenta completar a página atual com itens da próxima página (ou sincroniza)
+          await loadPage(curPage, curSearch || '');
+        }
+      } catch (e) {
+        console.warn('Falha ao tentar reencher página após exclusão (não crítico):', e);
+      }
+
       alert('Excluído com sucesso.');
     } catch (err) {
       console.error('Erro ao excluir:', err);
@@ -347,58 +392,64 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       if (bulkBtn) { bulkBtn.disabled = true; bulkBtn.textContent = `Excluindo...`; }
 
-      const data = await doDeleteRequest(ids); // mantém sua função existente
+      const data = await doDeleteRequest(ids);
 
-      // Interpreta resposta do backend:
-      // - prioridade para removed_ids (array)
-      // - fallback para removed (número): se igual ao solicitado, assumimos sucesso total
-      // - se backend não informar nada, mantemos comportamento conservador (assumir que todos removeram)
       let removedIds = [];
       if (data && Array.isArray(data.removed_ids)) {
         removedIds = data.removed_ids.map(String);
       } else if (data && typeof data.removed === 'number') {
-        if (data.removed === ids.length) {
-          removedIds = ids.map(String);
-        } else {
-          // servidor diz que removeu X mas não deu a lista; optamos por não remover nada automaticamente,
-          // para evitar inconsistência — em vez disso, sugerimos recarregar a página.
-          // (Se preferir, aqui podemos assumir que os primeiros N foram removidos — mas isso é arriscado.)
-          alert(`Servidor reportou ${data.removed} remoção(ões), mas não forneceu os IDs removidos. Por segurança, a listagem será recarregada para sincronizar.`);
-          try { loadPage(window.currentEntradaPage || 1); } catch (e) {}
+        if (data.removed === ids.length) removedIds = ids.map(String);
+        else {
+          alert(`Servidor reportou ${data.removed} remoção(ões), mas não forneceu os IDs removidos. A listagem será recarregada para sincronizar.`);
+          await loadPage(window.currentEntradaPage || 1, (modalContent && modalContent.querySelector('#searchEntradaInput')) ? modalContent.querySelector('#searchEntradaInput').value : '');
           return;
         }
       } else {
-        // sem informação útil: para manter compatibilidade você pode:
-        // a) assumir sucesso total (comportamento antigo) — arriscado; ou
-        // b) recarregar a página para sincronizar com servidor — mais seguro.
-        // Vou escolher a opção segura: recarregar.
         alert('Resposta do servidor sem detalhes de quais IDs foram removidos. A listagem será recarregada para sincronização.');
-        try { loadPage(window.currentEntradaPage || 1); } catch (e) {}
+        await loadPage(window.currentEntradaPage || 1, (modalContent && modalContent.querySelector('#searchEntradaInput')) ? modalContent.querySelector('#searchEntradaInput').value : '');
         return;
       }
 
       // remove do DOM apenas os IDs confirmados como removidos
-      removedIds.forEach(id => {
-        const cb = modalContent ? modalContent.querySelector(`.selectEntrada[data-id="${CSS.escape(String(id))}"]`) : null;
+      removedIds.forEach(rid => {
+        const cb = modalContent ? modalContent.querySelector(`.selectEntrada[data-id="${CSS.escape(String(rid))}"]`) : null;
         if (cb) {
           const row = cb.closest('tr');
           if (row && row.parentNode) row.parentNode.removeChild(row);
         }
-        selectedIds.delete(String(id));
+        selectedIds.delete(String(rid));
       });
 
-      // Feedback ao usuário
+      // feedback
       const removedCount = removedIds.length;
       const failedCount = ids.length - removedCount;
       if (failedCount > 0) {
         alert(`${removedCount} excluída(s). ${failedCount} não foram removidas (verifique logs/perm.)`);
-        // opcional: recarregar ou destacar failed ids
-        try { loadPage(window.currentEntradaPage || 1); } catch (e) {}
+        await loadPage(window.currentEntradaPage || 1, (modalContent && modalContent.querySelector('#searchEntradaInput')) ? modalContent.querySelector('#searchEntradaInput').value : '');
+        return;
       } else {
         alert(`Excluídas ${removedCount} entrada(s).`);
       }
 
       refreshBulkStateAndSelectAll();
+
+      // se faltarem linhas para completar a página, recarrega para puxar próximas entradas
+      try {
+        const perPage = window.ENTRADAS_PER_PAGE || 10;
+        const allRows = modalContent ? Array.from(modalContent.querySelectorAll('tbody tr')) : [];
+        const visibleRows = allRows.filter(tr => !tr.classList.contains('no-data') && tr.querySelectorAll('td').length > 0);
+        const curPage = window.currentEntradaPage || 1;
+        const curSearch = (modalContent && modalContent.querySelector('#searchEntradaInput')) ? modalContent.querySelector('#searchEntradaInput').value : '';
+
+        if (visibleRows.length === 0 && curPage > 1) {
+          await loadPage(curPage - 1, curSearch || '');
+        } else if (visibleRows.length < perPage) {
+          await loadPage(curPage, curSearch || '');
+        }
+      } catch (e) {
+        console.warn('Falha ao tentar reencher página após exclusão em massa (não crítico):', e);
+      }
+
     } catch (err) {
       console.error('Erro ao excluir em massa:', err);
       alert('Falha ao excluir em massa: ' + (err.message || err));
@@ -457,48 +508,133 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // -------------------- DELETE ALL MATCHING (all_matching: true) --------------------
   async function deleteAllMatching(searchTermRaw = '', extraFilters = {}) {
+    // confirmação inicial do usuário
     if (!confirm('Confirmar exclusão de TODAS as entradas correspondentes ao filtro? Esta ação é irreversível.')) return;
 
     const url = '/entrada_nf/excluir';
     const headers = { 'Content-Type': 'application/json' };
-    const csrf = getCsrfToken();
+    const csrf = (typeof getCsrfToken === 'function') ? getCsrfToken() : null;
     if (csrf) headers['X-CSRFToken'] = csrf;
 
-    // normalize before sending
-    const serverQ = normalizeForServer(String(searchTermRaw || ''));
+    // normaliza busca para o servidor
+    const serverQ = (typeof normalizeForServer === 'function') ? normalizeForServer(String(searchTermRaw || '')) : String(searchTermRaw || '');
 
-    const modalFilters = gatherFiltersFromModal();
-    const filters = Object.assign({}, modalFilters, extraFilters);
+    // coleta filtros do modal (se existir) e mescla com extraFilters
+    const modalFilters = (typeof gatherFiltersFromModal === 'function') ? gatherFiltersFromModal() : {};
+    const filters = Object.assign({}, modalFilters || {}, extraFilters || {});
+
+    // LIMPA filtros vazios (remove chaves com '', null, undefined)
+    const cleanFilters = {};
+    Object.keys(filters || {}).forEach((k) => {
+      const v = filters[k];
+
+      // ignora nulo/indefinido
+      if (v === null || v === undefined) return;
+
+      // strings: remove vazias e trim
+      if (typeof v === 'string') {
+        const s = v.trim();
+        if (s !== '') cleanFilters[k] = s;
+        return;
+      }
+
+      // arrays: filtra elementos vazios
+      if (Array.isArray(v)) {
+        const arr = v
+          .map(el => (el === null || el === undefined) ? '' : (typeof el === 'string' ? el.trim() : el))
+          .filter(el => !(el === '' || el === null || el === undefined));
+        if (arr.length > 0) cleanFilters[k] = arr;
+        return;
+      }
+
+      // números, booleanos, objetos: mantém como estão
+      cleanFilters[k] = v;
+    });
+
+    // monta payload (com filtros limpos)
+    const payload = {
+      all_matching: true,
+      q: serverQ || '',
+      filters: cleanFilters
+    };
+
+    // se não há busca nem filtros efetivos, adicionar confirm_all (exige o backend)
+    if ((!serverQ || serverQ === '') && Object.keys(cleanFilters || {}).length === 0) {
+      payload.confirm_all = true;
+    }
+
+    // DEBUG
+    try { console.debug('[entrada_nf] deleteAllMatching -> payload:', payload); } catch (e) {}
+
+    // tenta localizar botão de bulk (p/ feedback). Procura em modalContent se existir, senão no documento.
+    let bulkBtn = null;
+    try {
+      if (typeof modalContent !== 'undefined' && modalContent && typeof modalContent.querySelector === 'function') {
+        bulkBtn = modalContent.querySelector('#bulkDeleteEntradasBtn') || document.querySelector('#bulkDeleteEntradasBtn');
+      } else {
+        bulkBtn = document.querySelector('#bulkDeleteEntradasBtn');
+      }
+    } catch (e) {
+      bulkBtn = document.querySelector('#bulkDeleteEntradasBtn');
+    }
+
+    if (bulkBtn) {
+      bulkBtn.disabled = true;
+      // guarda texto original para restaurar
+      bulkBtn.dataset._origText = bulkBtn.dataset._origText || bulkBtn.textContent;
+      bulkBtn.textContent = 'Excluindo...';
+    }
 
     try {
       const resp = await fetch(url, {
         method: 'POST',
         headers,
         credentials: 'same-origin',
-        body: JSON.stringify({ all_matching: true, q: serverQ || '', filters })
+        body: JSON.stringify(payload)
       });
+
       let data = null;
       try { data = await resp.json(); } catch (e) { data = null; }
+
       if (!resp.ok) {
         const msg = (data && data.msg) ? data.msg : `Erro HTTP ${resp.status}`;
         throw new Error(msg);
       }
-      if (data && (data.status === 'error' || data.status === 'fail')) throw new Error(data.msg || 'Erro no servidor ao excluir.');
+
+      if (data && (data.status === 'error' || data.status === 'fail')) {
+        throw new Error(data.msg || 'Erro no servidor ao excluir.');
+      }
 
       const removed = (data && typeof data.removed === 'number') ? data.removed : 0;
-      selectedIds.clear();
+
+      // limpa seleção e estado global de seleção "todas as páginas"
+      try { if (selectedIds && typeof selectedIds.clear === 'function') selectedIds.clear(); } catch(e){}
       window._entradaSelectedAllPages = false;
+
       alert(`Excluídas ${removed} entradas (por filtro).`);
+
+      // recarregar página atual, se possível
       const curPage = window.currentEntradaPage || 1;
-      try { loadPage(curPage); } catch (e) { console.warn('Não foi possível recarregar listagem automaticamente.', e); }
+      if (typeof loadPage === 'function') {
+        try { await loadPage(curPage); } catch (e) { console.warn('Não foi possível recarregar listagem automaticamente.', e); }
+      }
+
       return data;
     } catch (err) {
       console.error('Erro em deleteAllMatching:', err);
       alert('Falha ao excluir por filtro: ' + (err.message || err));
       throw err;
+    } finally {
+      // restaura botão e atualiza estado de bulk (se existir)
+      if (bulkBtn) {
+        bulkBtn.disabled = false;
+        bulkBtn.textContent = bulkBtn.dataset._origText || 'Excluir';
+      }
+      if (typeof refreshBulkStateAndSelectAll === 'function') {
+        try { refreshBulkStateAndSelectAll(); } catch (e) { console.warn('refreshBulkStateAndSelectAll falhou', e); }
+      }
     }
   }
-
   // -------------------- SELECT ALL ACROSS PAGES (busca IDs) --------------------
   async function selectAllAcrossPages() {
     const rawSearch = (modalContent && modalContent.querySelector('#searchEntradaInput'))
@@ -976,6 +1112,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     root.addEventListener('click', async function (e) {
+      // ----- delete single (existing) -----
       const delBtn = e.target.closest('.btn-excluir');
       if (delBtn) {
         e.preventDefault();
@@ -985,6 +1122,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      // ----- start edit inline -----
       const editBtn = e.target.closest('.btn-editar');
       if (!editBtn) return;
       e.preventDefault();
@@ -1004,32 +1142,378 @@ document.addEventListener('DOMContentLoaded', () => {
       const pMat = getOptions('materiais');
       const pProd = getOptions('produtos');
 
+      // transforma células em inputs/selects
       for (const td of editableTds) {
         const col = td.dataset.col;
         const text = (td.textContent || '').trim();
 
-        if (col === 'fornecedor') td.innerHTML = '', td.appendChild(buildSelect(col, await pFor, text));
-        else if (/^material_\d+$/.test(col)) td.innerHTML = '', td.appendChild(buildSelect(col, await pMat, text));
-        else if (col === 'produto') td.innerHTML = '', td.appendChild(buildSelect(col, await pProd, text));
-        else if (col === 'data') {
+        if (col === 'fornecedor') {
+          td.innerHTML = '';
+          const sel = buildSelect(col, await pFor, text);
+          sel.classList.add('edit-input');
+          td.appendChild(sel);
+        } else if (/^material_\d+$/.test(col)) {
+          td.innerHTML = '';
+          const sel = buildSelect(col, await pMat, text);
+          sel.classList.add('edit-input');
+          td.appendChild(sel);
+        } else if (col === 'produto') {
+          td.innerHTML = '';
+          const sel = buildSelect(col, await pProd, text);
+          sel.classList.add('edit-input');
+          td.appendChild(sel);
+        } else if (col === 'data') {
           const iso = (/^\d{2}\/\d{2}\/\d{4}$/.test(text)) ? text.split('/').reverse().join('-') : text;
           td.innerHTML = buildInputHTML(col, iso, 'date');
-        } else td.innerHTML = buildInputHTML(col, text, 'text');
+        } else {
+          td.innerHTML = buildInputHTML(col, text, 'text');
+        }
       }
 
+      // ações (salvar/cancelar/adicionar)
       if (actionsTd) actionsTd.innerHTML = `
-        <button type="button" class="btn-save" title="Salvar" aria-label="Salvar">💾</button>
-        <button type="button" class="btn-cancel" title="Cancelar" aria-label="Cancelar">❌</button>
+        <div class="actions-cell">
+          <!-- primeira linha -->
+          <div class="actions-row">
+            <button type="button" class="btn-save" title="Salvar" aria-label="Salvar">💾</button>
+            <button type="button" class="btn-cancel" title="Cancelar" aria-label="Cancelar">❌</button>
+          </div>
+
+          <!-- segunda linha -->
+          <div class="actions-row">
+            <button type="button" class="btn-add-material icon-btn" title="Adicionar material" aria-label="Adicionar material">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 16V8a1 1 0 0 0-.553-.894l-8-4.5a1 1 0 0 0-.894 0l-8 4.5A1 1 0 0 0 3 8v8a1 1 0 0 0 .553.894l8 4.5a1 1 0 0 0 .894 0l8-4.5A1 1 0 0 0 21 16z"/>
+                <path d="M12 2v9" />
+                <path d="M3.5 8.5l8.5 4.5 8.5-4.5" />
+                <circle cx="18" cy="6" r="3" fill="currentColor" />
+                <path d="M18 4v4M16 6h4" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="label">Material</span>
+            </button>
+
+            <button type="button" class="btn-add-duplicata icon-btn" title="Adicionar duplicata" aria-label="Adicionar duplicata">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 2h6l4 4v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/>
+                <path d="M13 2v6h6" />
+                <rect x="4" y="8" width="12" height="8" rx="1" ry="1" />
+                <circle cx="18" cy="6" r="3" fill="currentColor" />
+                <path d="M18 4v4M16 6h4" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="label">Duplicata</span>
+            </button>
+          </div>
+        </div>
       `;
 
+      // limites
+      const MAX_MATERIAIS = window.MAX_MATERIAIS_DB || 5;
+      const MAX_DUPLICATAS = window.MAX_DUPLICATAS_DB || 6;
+
+      // helpers
+      function _maxIndexInRow(row, prefix) {
+        const tds = Array.from(row.querySelectorAll('td[data-col]'));
+        let max = 0;
+        tds.forEach(td => {
+          const m = String(td.dataset.col || '').match(new RegExp('^' + prefix + '(\\d+)$'));
+          if (m) max = Math.max(max, parseInt(m[1], 10));
+        });
+        return max;
+      }
+      function findHeaderRow() { return document.querySelector('#modal-entradas thead tr'); }
+      function headerThs() { const hr = findHeaderRow(); return hr ? Array.from(hr.children) : []; }
+      function indexOfHeaderByDataColExact(name) {
+        const ths = headerThs();
+        for (let i = 0; i < ths.length; i++) {
+          const th = ths[i];
+          if (th.dataset && th.dataset.col === name) return i;
+        }
+        // fallback textual exato
+        for (let i = 0; i < ths.length; i++) {
+          const txt = (ths[i].textContent || '').trim().toLowerCase().replace(/\s+/g,'');
+          if (txt === (name || '').toLowerCase().replace(/_/g,'')) return i;
+        }
+        return -1;
+      }
+      // indices only for numbered columns (avoid catching valor_unitario_energia)
+      function indicesOfHeaderStartingWithNumbered(prefix) {
+        const ths = headerThs();
+        const res = [];
+        const reDataset = new RegExp('^' + prefix.replace(/[-\/\\^$*+?.()|[\]{}]/g,'\\$&') + '(\\d+)$');
+        let textRe = null;
+        if (prefix.startsWith('valor_unitario')) textRe = /^\s*valor\s*unit(?:\.|ario)?\s*\.?\s*(\d+)\s*$/i;
+        else if (prefix.startsWith('material_')) textRe = /^\s*material\s*\.?\s*(\d+)\s*$/i;
+        else if (prefix.startsWith('duplicata_')) textRe = /^\s*duplicata\s*\.?\s*(\d+)\s*$/i;
+        for (let i = 0; i < ths.length; i++) {
+          const th = ths[i];
+          const ds = th.dataset && th.dataset.col ? th.dataset.col : '';
+          if (ds && reDataset.test(ds)) { res.push(i); continue; }
+          if (textRe) {
+            const txt = (th.textContent || '').trim();
+            if (textRe.test(txt)) res.push(i);
+          }
+        }
+        return res;
+      }
+      function lastHeaderIndexStartingWithNumbered(prefix) {
+        const idxs = indicesOfHeaderStartingWithNumbered(prefix);
+        return idxs.length ? idxs[idxs.length - 1] : -1;
+      }
+
+      // inserir/remover coluna globalmente
+      function insertColumnGlobally(name, headerText, insertBeforeIndex, removable = true) {
+        const headerRow = findHeaderRow();
+        if (!headerRow) return null;
+        const th = document.createElement('th');
+        th.dataset.col = name;
+        th.textContent = headerText;
+
+        if (removable) {
+          th.style.position = 'relative';
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.title = 'Remover coluna';
+          btn.className = 'th-remove-btn';
+          btn.style.cssText = 'position:absolute; top:2px; right:4px; font-size:12px; padding:2px 6px;';
+          btn.textContent = '✖';
+          btn.dataset.colName = name;
+          btn.addEventListener('click', function (ev) {
+            ev.stopPropagation(); ev.preventDefault();
+            const colToRemove = String(this.dataset.colName);
+            if (/^material_(\d+)$/.test(colToRemove)) {
+              const n = colToRemove.match(/^material_(\d+)$/)[1];
+              removeColumnAndPair(colToRemove, 'valor_unitario_' + n);
+            } else if (/^valor_unitario_(\d+)$/.test(colToRemove)) {
+              const n = colToRemove.match(/^valor_unitario_(\d+)$/)[1];
+              removeColumnAndPair('material_' + n, colToRemove);
+            } else if (/^duplicata_(\d+)$/.test(colToRemove)) {
+              removeColumnAndPair(colToRemove);
+            } else {
+              removeColumnAndPair(colToRemove);
+            }
+          });
+          th.appendChild(btn);
+        }
+
+        if (insertBeforeIndex >= 0 && insertBeforeIndex < headerRow.children.length) headerRow.insertBefore(th, headerRow.children[insertBeforeIndex]);
+        else { headerRow.appendChild(th); insertBeforeIndex = headerRow.children.length - 1; }
+
+        const tbodyRows = Array.from(document.querySelectorAll('#modal-entradas tbody tr'));
+        tbodyRows.forEach(tr => {
+          const existing = tr.querySelector(`td[data-col="${name}"]`);
+          if (existing) return;
+          const td = document.createElement('td');
+          td.dataset.col = name;
+          td.innerHTML = '';
+          if (insertBeforeIndex >= 0 && insertBeforeIndex < tr.children.length) tr.insertBefore(td, tr.children[insertBeforeIndex]);
+          else tr.appendChild(td);
+        });
+        return { th, index: insertBeforeIndex };
+      }
+      function removeColumnGlobally(name) {
+        const headerRow = findHeaderRow();
+        if (headerRow) {
+          const th = headerRow.querySelector(`th[data-col="${name}"]`);
+          if (th) th.remove();
+        }
+        const tds = Array.from(document.querySelectorAll(`#modal-entradas tbody td[data-col="${name}"]`));
+        tds.forEach(td => td.remove());
+      }
+
+      // --- campos que removeremos no save (serão enviados como null) ---
+      const fieldsToNullify = [];
+
+      function markFieldToNull(name) {
+        if (!fieldsToNullify.includes(name)) fieldsToNullify.push(name);
+      }
+
+      // remove colunas e marca para null (atualiza originalHTML e addedCols)
+      function removeColumnAndPair(...cols) {
+        cols.forEach(c => removeColumnGlobally(c));
+        cols.forEach(c => { if (originalHTML.hasOwnProperty(c)) delete originalHTML[c]; });
+        cols.forEach(c => {
+          const idx = addedCols.indexOf(c);
+          if (idx !== -1) addedCols.splice(idx, 1);
+        });
+        // marca para envio como NULL
+        cols.forEach(c => markFieldToNull(c));
+
+        // limpa conteúdo da célula da linha que está sendo editada (feedback imediato)
+        cols.forEach(c => {
+          const cell = row.querySelector(`td[data-col="${c}"]`);
+          if (cell) {
+            // se era input, remove; se era texto, limpa; também garante que se salvarem sem editar o valor será null
+            cell.innerHTML = '';
+          }
+        });
+      }
+
+      // ---------- antes de adicionar novas colunas: garantir que todos os TH dinâmicos tenham botão ✖ ----------
+      // adiciona botão remove em todas as colunas dinâmicas esperadas (1..MAX)
+      (function ensureRemoveButtonsOnAllDynamicThs() {
+        const MAX_M = MAX_MATERIAIS;
+        const MAX_D = MAX_DUPLICATAS;
+        for (let i = 1; i <= MAX_M; i++) {
+          const mat = `material_${i}`;
+          const vu = `valor_unitario_${i}`;
+          // se th não existe, não criamos aqui (mantemos apenas as colunas já renderizadas), mas se existir adicionamos o botão
+          [mat, vu].forEach(name => {
+            const th = document.querySelector(`#modal-entradas thead th[data-col="${name}"]`);
+            if (th && !th.querySelector('.th-remove-btn')) {
+              const btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'th-remove-btn';
+              btn.style.cssText = 'position:absolute; top:2px; right:4px; font-size:12px; padding:2px 6px;';
+              btn.textContent = '✖';
+              btn.title = 'Remover coluna';
+              btn.dataset.colName = name;
+              btn.addEventListener('click', function (ev) {
+                ev.stopPropagation(); ev.preventDefault();
+                const col = this.dataset.colName;
+                if (/^material_(\d+)$/.test(col)) {
+                  const n = col.match(/^material_(\d+)$/)[1];
+                  removeColumnAndPair(col, 'valor_unitario_' + n);
+                } else if (/^valor_unitario_(\d+)$/.test(col)) {
+                  const n = col.match(/^valor_unitario_(\d+)$/)[1];
+                  removeColumnAndPair('material_' + n, col);
+                } else if (/^duplicata_(\d+)$/.test(col)) {
+                  removeColumnAndPair(col);
+                } else {
+                  removeColumnAndPair(col);
+                }
+              });
+              th.style.position = 'relative';
+              th.appendChild(btn);
+            }
+          });
+        }
+        // duplicatas 1..MAX_D
+        for (let j = 1; j <= MAX_D; j++) {
+          const name = `duplicata_${j}`;
+          const th = document.querySelector(`#modal-entradas thead th[data-col="${name}"]`);
+          if (th && !th.querySelector('.th-remove-btn')) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'th-remove-btn';
+            btn.style.cssText = 'position:absolute; top:2px; right:4px; font-size:12px; padding:2px 6px;';
+            btn.textContent = '✖';
+            btn.title = 'Remover coluna';
+            btn.dataset.colName = name;
+            btn.addEventListener('click', function (ev) {
+              ev.stopPropagation(); ev.preventDefault();
+              removeColumnAndPair(this.dataset.colName);
+            });
+            th.style.position = 'relative';
+            th.appendChild(btn);
+          }
+        }
+      })();
+
+      // ---------- adicionar material / valor_unitario / duplicata (mantendo ordem) ----------
+      const addedCols = [];
+
+      const addMaterialBtn = row.querySelector('.btn-add-material');
+      if (addMaterialBtn) {
+        addMaterialBtn.addEventListener('click', async (ev) => {
+          ev.preventDefault();
+          const next = _maxIndexInRow(row, 'material_') + 1;
+          if (next > MAX_MATERIAIS) { alert('Já atingiu o máximo de materiais: ' + MAX_MATERIAIS); return; }
+
+          const colName = 'material_' + next;
+          const valorColName = 'valor_unitario_' + next;
+
+          let lastMatIdx = lastHeaderIndexStartingWithNumbered('material_');
+          let insertMatIdx;
+          if (lastMatIdx >= 0) insertMatIdx = lastMatIdx + 1;
+          else {
+            const prodIdx = indexOfHeaderByDataColExact('produto');
+            insertMatIdx = (prodIdx >= 0) ? prodIdx : headerThs().length;
+          }
+
+          const resMat = insertColumnGlobally(colName, `Material ${next}`, insertMatIdx, true);
+          addedCols.push(colName);
+
+          let lastVuIdx = lastHeaderIndexStartingWithNumbered('valor_unitario_');
+          let insertVuIdx = -1;
+          if (lastVuIdx >= 0) insertVuIdx = lastVuIdx + 1;
+          else {
+            const valIntegralIdx = indexOfHeaderByDataColExact('valor_integral');
+            if (valIntegralIdx >= 0) insertVuIdx = valIntegralIdx + 1;
+            else {
+              const firstDupIdxs = indicesOfHeaderStartingWithNumbered('duplicata_');
+              if (firstDupIdxs.length) insertVuIdx = firstDupIdxs[0];
+              else {
+                const vEnerIdx = indexOfHeaderByDataColExact('valor_unitario_energia');
+                insertVuIdx = vEnerIdx >= 0 ? vEnerIdx : headerThs().length;
+              }
+            }
+          }
+
+          const resVu = insertColumnGlobally(valorColName, `Valor Unit. ${next}`, insertVuIdx, true);
+          addedCols.push(valorColName);
+
+          // adiciona inputs na linha editada
+          const newMatTd = row.querySelector(`td[data-col="${colName}"]`);
+          const newVuTd = row.querySelector(`td[data-col="${valorColName}"]`);
+          const opts = await getOptions('materiais');
+          if (newMatTd) {
+            newMatTd.innerHTML = '';
+            const sel = buildSelect(colName, opts, '');
+            sel.classList.add('edit-input');
+            newMatTd.appendChild(sel);
+          }
+          if (newVuTd) {
+            newVuTd.innerHTML = buildInputHTML(valorColName, '', 'text');
+            const inp = newVuTd.querySelector('input[name]');
+            if (inp) inp.classList.add('edit-input');
+          }
+        });
+      }
+
+      const addDupBtn = row.querySelector('.btn-add-duplicata');
+      if (addDupBtn) {
+        addDupBtn.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          const next = _maxIndexInRow(row, 'duplicata_') + 1;
+          if (next > MAX_DUPLICATAS) { alert('Já atingiu o máximo de duplicatas: ' + MAX_DUPLICATAS); return; }
+
+          const colName = 'duplicata_' + next;
+
+          let lastDupIdx = lastHeaderIndexStartingWithNumbered('duplicata_');
+          let insertDupIdx;
+          if (lastDupIdx >= 0) insertDupIdx = lastDupIdx + 1;
+          else {
+            const vEnerIdx = indexOfHeaderByDataColExact('valor_unitario_energia');
+            insertDupIdx = vEnerIdx >= 0 ? vEnerIdx : headerThs().length - 1;
+          }
+
+          insertColumnGlobally(colName, `Duplicata ${next}`, insertDupIdx, true);
+          addedCols.push(colName);
+
+          const newTd = row.querySelector(`td[data-col="${colName}"]`);
+          if (newTd) {
+            newTd.innerHTML = buildInputHTML(colName, '', 'text');
+            const inp = newTd.querySelector('input[name]');
+            if (inp) inp.classList.add('edit-input');
+          }
+        });
+      }
+
+      // ------------------ Cancel (restaura original + remove colunas adicionadas) ------------------
       const cancelBtn = row.querySelector('.btn-cancel');
       if (cancelBtn) cancelBtn.addEventListener('click', ev => {
         ev.preventDefault();
-        editableTds.forEach(td => td.innerHTML = originalHTML[td.dataset.col] ?? td.innerHTML);
+        editableTds.forEach(td => {
+          if (originalHTML.hasOwnProperty(td.dataset.col)) td.innerHTML = originalHTML[td.dataset.col];
+        });
+
+        try { addedCols.forEach(col => removeColumnGlobally(col)); } finally { addedCols.length = 0; }
+
         if (actionsTd) actionsTd.innerHTML = prevActionsHtml;
         row.classList.remove('editing');
       }, { once: true });
 
+      // ------------------ Save (coleta .edit-input e envia) ------------------
       const saveBtn = row.querySelector('.btn-save');
       if (saveBtn) saveBtn.addEventListener('click', async ev => {
         ev.preventDefault();
@@ -1041,15 +1525,14 @@ document.addEventListener('DOMContentLoaded', () => {
         Array.from(row.querySelectorAll('.edit-input')).forEach(el => {
           let val = el.value;
           const name = el.name;
-
-          // normaliza monetários
-          if (/custo|valor|preco/i.test(name) && val) {
-            val = val.replace(/\./g, '').replace(',', '.');
-            val = parseFloat(val).toFixed(2).replace('.', ',');
-          }
-
-          fields[name] = val;
+          if (/custo|valor|preco/i.test(name) && val) { val = String(val).replace(/\./g, '').replace(',', '.'); }
+          fields[name] = (val === '') ? null : val;
         });
+
+        // inclui colunas marcadas para zera(r) no banco
+        if (fieldsToNullify && fieldsToNullify.length) {
+          fieldsToNullify.forEach(col => { fields[col] = null; });
+        }
 
         const url = `/entrada_nf/editar/${encodeURIComponent(id)}`;
         const headers = { 'Content-Type': 'application/json' };
@@ -1068,20 +1551,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (newVal === undefined) {
               const inp = td.querySelector('.edit-input');
               if (!inp) return;
-              newVal = inp.tagName.toLowerCase() === 'select' ? inp.options[inp.selectedIndex]?.text || inp.value : inp.value;
+              newVal = inp.tagName.toLowerCase() === 'select' ? (inp.options[inp.selectedIndex]?.text || inp.value) : inp.value;
             }
 
-            // === Normaliza formato BR ===
             if (col === 'data' && /^\d{4}-\d{2}-\d{2}$/.test(newVal)) {
-              const [y, m, d] = newVal.split('-');
-              newVal = `${d}/${m}/${y}`;
+              const [y, m, d] = newVal.split('-'); newVal = `${d}/${m}/${y}`;
             } else if (col.toLowerCase().includes('nf') || col.toLowerCase().includes('numero')) {
-              newVal = String(parseInt(String(newVal).replace(/\./g, '').replace(',', '')));
+              newVal = String(parseInt(String(newVal || '').replace(/\./g, '').replace(',', '' ) || 0));
             } else if ((typeof newVal === 'string' && newVal.trim().endsWith('%')) || col.toLowerCase().includes('ipi') || col.toLowerCase().includes('percent')) {
-              let raw = String(newVal).replace('%', '').trim().replace(',', '.');
-              if (!isNaN(raw)) newVal = parseFloat(raw).toFixed(2).replace('.', ',') + '%';
-            } else if (!isNaN(String(newVal).replace(',', '.'))) {
-              let num = parseFloat(String(newVal).replace(',', '.'));
+              let raw = String(newVal || '').replace('%', '').trim().replace(',', '.');
+              if (!isNaN(raw) && raw !== '') newVal = parseFloat(raw).toFixed(2).replace('.', ',') + '%';
+            } else if (!isNaN(String(newVal || '').replace(',', '.')) && String(newVal || '').trim() !== '') {
+              let num = parseFloat(String(newVal || '').replace(',', '.'));
               if (!isNaN(num)) {
                 let [intPart, decPart] = num.toFixed(2).split('.');
                 intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -1089,18 +1570,26 @@ document.addEventListener('DOMContentLoaded', () => {
               }
             }
 
-            td.textContent = newVal;
+            td.textContent = (newVal === null || newVal === undefined) ? '' : newVal;
           });
+
+          // remove colunas temporárias (se houver) e recarrega a listagem
+          try { if (addedCols.length) addedCols.forEach(col => removeColumnGlobally(col)); } finally { addedCols.length = 0; }
 
           if (actionsTd) actionsTd.innerHTML = prevActionsHtml;
           row.classList.remove('editing');
+
+          const curPage = window.currentEntradaPage || 1;
+          const curSearch = (document.querySelector('#searchEntradaInput') || {}).value || '';
+          if (typeof loadPage === 'function') await loadPage(curPage, curSearch);
+
           alert('Atualizado com sucesso.');
         } catch (err) {
           alert('Falha ao salvar: ' + (err.message || err));
           saveBtn.disabled = false;
         }
       }, { once: true });
-    });
+    }); // fim listener
   })();
 
   // --- preenche células/inputs numéricos vazios com 0,00 / 0,000 ---

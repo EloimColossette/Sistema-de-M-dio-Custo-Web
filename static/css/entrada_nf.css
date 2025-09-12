@@ -944,3 +944,77 @@ td.acoes .btn-cancel {
   justify-content: center;
 }
 td.acoes .btn-save[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+/* botão pequeno dentro do TH */
+#modal-entradas thead th { position: relative; }
+#modal-entradas thead .th-remove-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 12px;
+  padding: 2px 6px;
+  line-height: 1;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+
+/* botões-ícone (usados em adicionar material/duplicata) */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: background 0.18s ease, transform 0.06s ease;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: currentColor;
+}
+
+/* container das ações em coluna */
+.actions-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px; /* espaço entre as linhas */
+}
+
+/* linha dos botões (superior ou inferior) */
+.actions-row {
+  display: flex;
+  gap: 8px; /* espaço entre botões na mesma linha */
+  justify-content: center; /* centraliza horizontalmente */
+}
+
+/* tamanho do SVG */
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* hover / press effects */
+.icon-btn:hover { background: rgba(0,0,0,0.04); transform: translateY(-1px); }
+.icon-btn:active { transform: translateY(0); }
+
+/* cores específicas */
+.btn-add-material { color: #2563eb; }    /* azul */
+.btn-add-duplicata { color: #16a34a; }   /* verde */
+
+/* label pequeno ao lado do ícone (opcional visual) */
+.icon-btn .label {
+  display: inline-block;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: inherit;
+}
+
+/* muda o estilo quando estiver no cabeçalho menor (esconder texto se preferir) */
+@media (max-width: 480px) {
+  .icon-btn .label { display: none; }
+}

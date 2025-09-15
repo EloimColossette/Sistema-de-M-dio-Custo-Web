@@ -9,7 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   console.log('Materiais disponíveis:', window.materiaisOptions);
 
-
   // --- Persistência de colunas ocultas ---
   const STORAGE_KEY = 'entrada_nf_colunas_ocultas';
   function loadHiddenCols() {
@@ -104,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
     );
   }
 
-  // substituir a função existente por esta versão com scope
+  // DEFINIÇÃO da função (sem auto-chamar)
   function initMainNumericInputs(scope = document) {
     const inputs = Array.from(scope.querySelectorAll('input[name]'));
     inputs.forEach(input => {
@@ -124,6 +123,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // CHAMADA única — logo após as funções serem carregadas (fora da função acima)
+  try { initMainNumericInputs(document); } catch (e) { console.warn('initMainNumericInputs init failed', e); }
 
   // -------------------- MÁSCARA DE DATA --------------------
   function attachDateMask(scope = document) {
@@ -681,15 +683,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!modalContent) return;
     const bulkBtn = modalContent.querySelector('#bulkDeleteEntradasBtn');
     if (!bulkBtn) return;
+
     const count = selectedIds.size;
-    if (count > 0) {
+
+    // Mostrar botão apenas quando houver mais de 1 selecionado,
+    // ou quando o estado diz que "todas as páginas" foram selecionadas.
+    if (count > 1 || window._entradaSelectedAllPages) {
       bulkBtn.style.display = '';
-      if (window._entradaSelectedAllPages) bulkBtn.textContent = `Excluir (todas as páginas: ${count})`;
-      else bulkBtn.textContent = `Excluir (${count})`;
+      if (window._entradaSelectedAllPages) bulkBtn.textContent = `🗑️ Excluir Selecionados`;
+      else bulkBtn.textContent = `🗑️ Excluir Selecionados`;
     } else {
+      // se houver exatamente 1 selecionado, não mostrar botão
       bulkBtn.style.display = 'none';
-      bulkBtn.textContent = 'Excluir (0)';
+      bulkBtn.textContent = '🗑️ Excluir Selecionados';
     }
+
+    // sincroniza checkbox de cabeçalho
     const selectAll = modalContent.querySelector('#selectAllEntradas');
     const pageCheckboxes = Array.from(modalContent.querySelectorAll('.selectEntrada'));
     if (!selectAll) return;
@@ -757,6 +766,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // reaplica seus inicializadores
       try { initMainNumericInputs(modalContent); } catch(e) {}
+      try { initMainNumericInputs(document); } catch(e) { console.warn('initMainNumericInputs init failed', e); }
+      // após preencher células vazias com zeros (ou tratá-las), ocultar colunas duplicata totalmente vazias/NaN
+      try { hideEmptyNumericColumns(modalContent, 'duplicata'); } catch (e) { console.warn('hideEmptyNumericColumns falhou', e); }
       // preenche células/inputs numéricos vazios com zeros formatados
       try { fillEmptyNumericCells(modalContent); } catch(e) {}
       // Restaura seleção global
@@ -825,32 +837,46 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!modalContent) return;
     const toolbar = modalContent.querySelector('.search-and-filter');
     if (!toolbar) return;
-    if (!toolbar.querySelector('#bulkDeleteEntradasBtn')) {
-      const btn = document.createElement('button');
-      btn.id = 'bulkDeleteEntradasBtn';
-      btn.type = 'button';
-      btn.className = 'btn btn-danger btn-sm';
-      btn.style.marginLeft = '8px';
-      btn.style.display = 'none';
-      btn.textContent = 'Excluir (0)';
-      toolbar.appendChild(btn);
 
-      btn.addEventListener('click', async () => {
-        const ids = Array.from(selectedIds);
-        if (ids.length === 0) return;
-        const curSearch = (modalContent.querySelector('#searchEntradaInput') || {}).value || '';
-        if (window._entradaSelectedAllPages) {
-          try { await deleteAllMatching(curSearch, {}); } catch (e) { console.error('Erro ao excluir todas por filtro:', e); }
-          return;
-        }
-        confirmAndDeleteBulk(ids);
-      });
+    // já existe? retorna
+    if (toolbar.querySelector('#bulkDeleteEntradasBtn')) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'bulkDeleteEntradasBtn';
+    btn.type = 'button';
+    btn.className = 'btn btn-danger btn-sm';
+    btn.style.marginLeft = '8px';
+    btn.style.display = 'none';
+    btn.textContent = '🗑️ Excluir Selecionados';
+
+    // tentar inserir próximo ao botão de busca (#searchEntradaBtn)
+    const searchBtn = toolbar.querySelector('#searchEntradaBtn');
+    if (searchBtn && searchBtn.parentNode) {
+      // inserir logo após o botão de busca (mantendo espaçamento)
+      searchBtn.insertAdjacentElement('afterend', btn);
+    } else {
+      // fallback: append no final da toolbar
+      toolbar.appendChild(btn);
     }
+
+    btn.addEventListener('click', async () => {
+      const ids = Array.from(selectedIds);
+      if (ids.length === 0 && !window._entradaSelectedAllPages) return;
+      const curSearch = (modalContent.querySelector('#searchEntradaInput') || {}).value || '';
+      if (window._entradaSelectedAllPages) {
+        try { await deleteAllMatching(curSearch, {}); } catch (e) { console.error('Erro ao excluir todas por filtro:', e); }
+        return;
+      }
+      confirmAndDeleteBulk(ids);
+    });
   }
 
   // -------------------- ATTACH MODAL EVENTS --------------------
   function attachModalEvents() {
     if (!modalContent) return;
+
+    // compactar paginação (antes de ligar listeners)
+    try { condensePagination(modalContent, 3); } catch (e) { console.warn('condensePagination falhou', e); }
 
     // fechar modal via “×”
     const btnClose = modalContent.querySelector('#fecharModalEntradaBtn');
@@ -871,16 +897,50 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
-    // botão de busca (caso exista)
-    const searchBtn = modalContent.querySelector('#searchEntradaBtn');
-    const searchInput = modalContent.querySelector('#searchEntradaInput');
-    if (searchBtn && searchInput && !searchBtn._hasClick) {
-      searchBtn._hasClick = true;
-      searchBtn.addEventListener('click', () => {
-        const termRaw = (searchInput.value || '');
-        loadPage(1, termRaw);
-      });
-    }
+    // ----- configurar busca: só no clique (ou Enter) -----
+    (function setupSearchUI() {
+      const searchContainer = modalContent.querySelector('.search-container');
+      if (!searchContainer) return;
+
+      let searchBtn = searchContainer.querySelector('#searchEntradaBtn');
+      let searchInput = searchContainer.querySelector('#searchEntradaInput');
+
+      // remover listeners antigos no input substituindo por clone
+      if (searchInput && searchInput.parentNode) {
+        const cloned = searchInput.cloneNode(true);
+        // manter id/name/value/placeholder etc.
+        cloned.value = searchInput.value || '';
+        searchInput.parentNode.replaceChild(cloned, searchInput);
+        searchInput = cloned;
+      }
+
+      // adicionar clique no botão (pesquisa somente ao clicar)
+      if (searchBtn && !searchBtn._hasClick) {
+        searchBtn._hasClick = true;
+        searchBtn.addEventListener('click', () => {
+          const termRaw = (searchInput && (searchInput.value || '')) || '';
+          loadPage(1, termRaw);
+        });
+      }
+
+      // permitir Enter no input para acionar a pesquisa (opcional)
+      if (searchInput && !searchInput._hasEnterListener) {
+        searchInput._hasEnterListener = true;
+        searchInput.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') {
+            ev.preventDefault();
+            if (searchBtn) searchBtn.click();
+            else {
+              const termRaw = (searchInput.value || '');
+              loadPage(1, termRaw);
+            }
+          }
+        });
+      }
+    })();
+
+    // inserir botão de exclusão em massa (perto da pesquisa)
+    try { injectBulkDeleteButton(); } catch (e) { console.warn('injectBulkDeleteButton falhou', e); }
 
     // checkbox do cabeçalho: marca/desmarca página atual e faz fetch de todos os ids quando marcar
     const selectAll = modalContent.querySelector('#selectAllEntradas');
@@ -905,9 +965,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         refreshBulkStateAndSelectAll();
 
-        // buscar todos ids com filtros
+        // buscar todos ids com filtros (selecionar across pages)
         try {
           await selectAllAcrossPages();
+          // re-sincronizar checkboxes visuais com o conjunto selecionado
           modalContent.querySelectorAll('.selectEntrada').forEach(cb => { if (selectedIds.has(cb.dataset.id)) cb.checked = true; });
         } catch (err) {
           console.error('Erro ao selecionar todas as páginas automaticamente:', err);
@@ -939,6 +1000,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       };
     }
+
+    // garantir estado inicial do botão bulk (caso já haja seleção previamente)
+    try { refreshBulkStateAndSelectAll(); } catch (e) { /* ignore */ }
   }
 
   // Preenche e vincula o dropdown de colunas dinâmicas
@@ -1592,13 +1656,112 @@ document.addEventListener('DOMContentLoaded', () => {
     }); // fim listener
   })();
 
+  // === condensa paginação: transforma longas listas de páginas em 1 ... x-1 x x+1 ... N ===
+  function condensePagination(root, maxVisible = 3) {
+    if (!root) return;
+    const pag = root.querySelector('.pagination');
+    if (!pag) return;
+
+    const allPageEls = Array.from(pag.querySelectorAll('a.page-btn, span.current'));
+    if (!allPageEls.length) return;
+
+    // extrai números das tags (data-page para a.page-btn, texto para span.current)
+    const pages = allPageEls.map(el => {
+      if (el.tagName.toLowerCase() === 'a') return parseInt(el.dataset.page, 10);
+      const n = parseInt(el.textContent, 10);
+      return Number.isNaN(n) ? null : n;
+    }).filter(n => Number.isFinite(n));
+
+    if (!pages.length) return;
+    const totalPages = Math.max(...pages);
+
+    // achar página atual (span.current)
+    const currentEl = pag.querySelector('span.current');
+    const currentPage = currentEl ? (parseInt(currentEl.textContent, 10) || 1) : 1;
+
+    // se não ultrapassa o limite, nada a fazer
+    if (totalPages <= maxVisible) return;
+
+    // Identificar botões especiais (first/prev / next/last) existentes no HTML original
+    const originalAnchors = Array.from(pag.querySelectorAll('a.page-btn'));
+    const firstPrev = originalAnchors.filter(a => {
+      const txt = (a.textContent || '').trim().toLowerCase();
+      return /primeiro|«|anterior|←/.test(txt);
+    }).map(a => a.cloneNode(true));
+    const nextLast = originalAnchors.filter(a => {
+      const txt = (a.textContent || '').trim().toLowerCase();
+      return /último|ultimo|»|próximo|proximo|→/.test(txt);
+    }).map(a => a.cloneNode(true));
+
+    // calcula janela: mostrar vizinhos do current (ajusta nas bordas)
+    let start = Math.max(1, currentPage - 1);
+    let end = Math.min(totalPages, currentPage + 1);
+    while ((end - start + 1) < maxVisible) {
+      if (start > 1) start--;
+      else if (end < totalPages) end++;
+      else break;
+    }
+
+    // construir novo conteúdo
+    const fragment = document.createDocumentFragment();
+    // adiciona first/prev no começo (se existirem)
+    firstPrev.forEach(el => fragment.appendChild(el));
+
+    function makeLink(page) {
+      const a = document.createElement('a');
+      a.href = '#';
+      a.className = 'page-btn';
+      a.dataset.page = String(page);
+      a.textContent = String(page);
+      return a;
+    }
+    function makeCurrent(page) {
+      const s = document.createElement('span');
+      s.className = 'current';
+      s.textContent = String(page);
+      return s;
+    }
+
+    if (start > 1) {
+      fragment.appendChild(makeLink(1));
+      if (start > 2) {
+        const dots = document.createElement('span');
+        dots.className = 'ellipsis';
+        dots.textContent = '…';
+        fragment.appendChild(dots);
+      }
+    }
+
+    for (let p = start; p <= end; p++) {
+      if (p === currentPage) fragment.appendChild(makeCurrent(p));
+      else fragment.appendChild(makeLink(p));
+    }
+
+    if (end < totalPages) {
+      if (end < totalPages - 1) {
+        const dots2 = document.createElement('span');
+        dots2.className = 'ellipsis';
+        dots2.textContent = '…';
+        fragment.appendChild(dots2);
+      }
+      fragment.appendChild(makeLink(totalPages));
+    }
+
+    // adiciona next/last no fim (se existirem)
+    nextLast.forEach(el => fragment.appendChild(el));
+
+    // substitui conteúdo mantendo o container .pagination
+    pag.innerHTML = '';
+    pag.appendChild(fragment);
+  }
+
   // --- preenche células/inputs numéricos vazios com 0,00 / 0,000 ---
   function fillEmptyNumericCells(root) {
     if (!root) return;
     const prefixes = [
-      'valor_unitario',          // cobre valor_unitario_1..N e valor_unitario (sem sufixo)
-      'duplicata',               // duplicata_1..N
-      'valor_unitario_energia',  // campo específico
+      'valor_unitario',
+      'duplicata',
+      'valor_unitario_energia',
       'valor_mao_obra_tm_metallica',
       'peso_liquido',
       'valor_integral',
@@ -1606,7 +1769,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
 
     prefixes.forEach(pref => {
-      // encontra tds com data-col que começam com o prefixo, e também inputs cujo name/id/ data-col começam com prefixo
       const tds = Array.from(root.querySelectorAll(`td[data-col^="${pref}"], td[class*="${pref}"], td.${pref}`));
       const inputs = Array.from(root.querySelectorAll(
         `input[data-col^="${pref}"], input[name^="${pref}"], input[id^="${pref}"]`
@@ -1615,37 +1777,87 @@ document.addEventListener('DOMContentLoaded', () => {
       const decimals = pref.startsWith('peso') ? 3 : 2;
       const zeroText = decimals === 3 ? '0,000' : '0,00';
 
+      // tratar células (td)
       tds.forEach(td => {
         const txt = (td.textContent || '').trim();
-        // trata como vazio também traços/placeholder comuns
         if (txt === '' || txt === '-' || txt === '—' || txt === 'null' || txt === 'undefined') {
-          // se dentro do td existir um input, atualiza o input; senão atualiza o textContent
           const inp = td.querySelector('input, select, textarea');
           if (inp) {
-            if (inp.tagName.toLowerCase() === 'input' || inp.tagName.toLowerCase() === 'textarea') {
-              inp.value = zeroText;
-              // marca dataset.col se não existir (ajuda handlers posteriores)
-              if (!inp.dataset.col && inp.name) inp.dataset.col = inp.name;
-              // força formatação final (se existir)
-              try { if (typeof handleNumericFinalize === 'function') handleNumericFinalize(inp); } catch(e){/* ignore */ }
-            } else if (inp.tagName.toLowerCase() === 'select') {
-              // nada para setar em selects (deixa em branco)
-            }
+            // Não forçar 0,00 para inputs; apenas garanta dataset.col para handlers
+            if (!inp.dataset.col && inp.name) inp.dataset.col = inp.name;
+            // Para duplicata: manter em branco
           } else {
+            // célula de texto (td) sem input: exibe zero formatado
             td.textContent = zeroText;
           }
         }
       });
 
-      // inputs soltos (fora do td) — por exemplo formulários de edição/linhas inline
+      // inputs soltos fora de <td> (ex.: formulários dinâmicos)
       inputs.forEach(inp => {
         const v = (inp.value || '').trim();
         if (v === '' || v === '-' || v === '—') {
-          inp.value = zeroText;
           if (!inp.dataset.col && inp.name) inp.dataset.col = inp.name;
-          try { if (typeof handleNumericFinalize === 'function') handleNumericFinalize(inp); } catch(e){/* ignore */ }
+          // NÃO atribuir inp.value = '0,00' aqui
         }
       });
+    });
+  }
+
+  // === oculta colunas numéricas (duplicatas/valor_unitario) que estão totalmente vazias/NaN ===
+  function hideEmptyNumericColumns(root, prefix = 'duplicata') {
+    if (!root) return;
+    // tenta localizar THs por data-col primeiro, senão por texto que comece com "Duplicata"
+    const headerThs = Array.from(root.querySelectorAll('thead th'));
+    const candidateThs = headerThs.filter(th => {
+      if (th.dataset && th.dataset.col && String(th.dataset.col).startsWith(prefix)) return true;
+      const txt = (th.textContent || '').trim().toLowerCase();
+      if (prefix === 'duplicata') {
+        return /^duplicata\s*\d+/i.test(txt) || /^duplicata/i.test(txt);
+      }
+      // fallback: data-col start
+      return false;
+    });
+
+    // para cada TH candidato, verifica todas as células da coluna correspondente
+    candidateThs.forEach(th => {
+      // índice da coluna (1-based)
+      const colIndex = Array.from(th.parentNode.children).indexOf(th) + 1;
+      if (colIndex <= 0) return;
+
+      const rows = Array.from(root.querySelectorAll('tbody tr'));
+      // considera a coluna vazia se TODAS as células estiverem vazias/NaN/placeholder
+      const allEmpty = rows.every(tr => {
+        const td = tr.children[colIndex - 1];
+        if (!td) return true;
+        // se td contém input, pega o value; senão o textContent
+        const inp = td.querySelector('input, textarea, select');
+        let raw = inp ? (inp.value || '') : (td.textContent || '');
+        raw = String(raw).trim();
+
+        if (raw === '' || raw === '-' || raw === '—' || /^nan$/i.test(raw) || /^null$/i.test(raw) || /^undefined$/i.test(raw)) return true;
+
+        // usa a função normalizeNumberString (já definida no seu arquivo) para checar se é number-like
+        try {
+          const norm = (typeof normalizeNumberString === 'function') ? normalizeNumberString(raw) : raw.replace(/\./g,'').replace(',','.');
+          if (norm === '' || Number.isNaN(Number(norm))) return true;
+        } catch (e) {
+          // se erro ao normalizar, considera não-vazio (mais seguro)
+          return false;
+        }
+
+        // se passou por todas as checagens, então não está vazio
+        return false;
+      });
+
+      // aplica estilo: oculta a coluna inteira (th + todas td:nth-child)
+      const selector = `thead th:nth-child(${colIndex}), tbody td:nth-child(${colIndex})`;
+      const els = Array.from(root.querySelectorAll(selector));
+      if (allEmpty) {
+        els.forEach(el => { el.style.display = 'none'; });
+      } else {
+        els.forEach(el => { el.style.display = ''; });
+      }
     });
   }
 
@@ -1663,7 +1875,12 @@ document.addEventListener('DOMContentLoaded', () => {
       ).map(r =>
         parseInt(r.querySelector('select[name^="material_"]').name.split('_')[1], 10)
       );
-      if (existing.length >= MAX_MATERIAIS) return;
+
+      // mostra aviso quando atingir o máximo
+      if (existing.length >= MAX_MATERIAIS) {
+        alert('Não é possível adicionar mais materiais — máximo de ' + MAX_MATERIAIS + ' atingido.');
+        return;
+      }
 
       let idx;
       for (let i = 1; i <= MAX_MATERIAIS; i++) {
@@ -1674,6 +1891,7 @@ document.addEventListener('DOMContentLoaded', () => {
       reorderMateriais(materiaisContainer, ['material', 'valor_unitario']);
     });
   }
+
   if (btnRemoveMaterial) {
     btnRemoveMaterial.addEventListener('click', () => {
       const rows = materiaisContainer.querySelectorAll('.material-row');
@@ -1749,16 +1967,23 @@ document.addEventListener('DOMContentLoaded', () => {
       ).map(r =>
         parseInt(r.querySelector('input[name^="duplicata_"]').name.split('_')[1], 10)
       );
-      if (existing.length >= MAX_DUPLICATAS) return;
+
+      // mostra aviso quando atingir o máximo
+      if (existing.length >= MAX_DUPLICATAS) {
+        alert('Não é possível adicionar mais duplicatas — máximo de ' + MAX_DUPLICATAS + ' atingido.');
+        return;
+      }
 
       let idx;
       for (let i = 1; i <= MAX_DUPLICATAS; i++) {
         if (!existing.includes(i)) { idx = i; break; }
       }
+      if (!idx) return;
       addDuplicataRow(idx);
       reorderDuplicatas(duplicatasContainer, ['duplicata']);
     });
   }
+
   if (btnRemoveDuplicata) {
     btnRemoveDuplicata.addEventListener('click', () => {
       const rows = duplicatasContainer.querySelectorAll('.duplicata-row');

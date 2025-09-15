@@ -85,8 +85,8 @@
     <section class="content">
       <div class="tabs-nav">
         <button class="tab-btn active" data-tab="aba1">Materiais/Produtos</button>
-        <button class="tab-btn" data-tab="aba2">Relatorio Saida NF</button>
-        <button class="tab-btn" data-tab="aba3">Acessos</button>
+        <button class="tab-btn" data-tab="aba2">Relatorio Saida NFs</button>
+        <button class="tab-btn" data-tab="aba3">Relatório de Entrada NFs</button>
         <button class="tab-btn" data-tab="aba4">Alertas</button>
         <button class="tab-btn" data-tab="aba6">Configurações</button>
         <span class="tab-indicator"></span>
@@ -156,58 +156,98 @@
         </div>
 
         <div class="tab-content" id="aba2">
-  
-        <!-- Título fora do card -->
-        <h2>Últimas Saídas de NF</h2>
-        
-        <div class="card report-card mb-4">
-          <div class="card-body p-0">
-            <div class="table-responsive report-table">
-              <table class="table mb-0">
-                <colgroup>
-                  <col style="width: 90px">
-                  <col style="width: 60px">
-                  <col style="width: 200px">
-                  <col style="width: 80px">
-                  <col style="width: 180px">
-                  <col style="width: 120px">
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th>Data</th>
-                    <th>NF</th>
-                    <th>Produto</th>
-                    <th class="text-right">Peso</th>
-                    <th>Cliente</th>
-                    <th>Base Produto</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for item in ultimas_saidas %}
-                  <tr>
-                    <td>{{ item.data }}</td>
-                    <td>{{ item.nf }}</td>
-                    <td>{{ item.produto }}</td>
-                    <td class="text-right">{{ item.peso }}</td>
-                    <td>{{ item.cliente }}</td>
-                    <td>{{ item.base }}</td>
-                  </tr>
-                  {% else %}
-                  <tr>
-                    <td colspan="6" class="text-center py-3">
-                      Nenhuma saída de NF encontrada.
-                    </td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
+          <!-- Título fora do card -->
+          <h2>Últimas Saídas de NFs</h2>
+          <div class="card report-card mb-4">
+            <div class="card-body p-0">
+              <div class="table-responsive report-table" id="saida-nf-frame">
+                <table class="table mb-0">
+                  <colgroup>
+                    <col style="width: 90px">
+                    <col style="width: 60px">
+                    <col style="width: 200px">
+                    <col style="width: 80px">
+                    <col style="width: 180px">
+                    <col style="width: 120px">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>NF</th>
+                      <th>Produto</th>
+                      <th class="text-right">Peso</th>
+                      <th>Cliente</th>
+                      <th>Base Produto</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for item in ultimas_saidas %}
+                    <tr>
+                      <td>{{ item.data }}</td>
+                      <td>{{ item.nf }}</td>
+                      <td>{{ item.produto }}</td>
+                      <td class="text-right">{{ item.peso }}</td>
+                      <td>{{ item.cliente }}</td>
+                      <td>{{ item.base }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                      <td colspan="6" class="text-center py-3">
+                        Nenhuma saída de NF encontrada.
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="tab-content" id="aba3">
-          <h2>Acessos</h2>
-          <div class="chart-container" id="chart-acessos"></div>
+          <h2>Última Entrada NFs</h2>
+
+          <div class="card report-card mb-4">
+            <div class="card-body p-0">
+              <div class="table-responsive report-table" id="ultima-entrada-frame">
+                <table class="table mb-0">
+                  <colgroup>
+                    <col style="width:120px">
+                    <col style="width:80px">
+                    <col style="width:220px">
+                    <col style="width:200px">
+                    <col style="width:120px">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>Data</th>
+                      <th>NF</th>
+                      <th>Fornecedor</th>
+                      <th class="text-center">Produto</th>
+                      <th class="text-center">Peso Líq.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% if ultima_entrada %}
+                    <tr>
+                      <td>{{ ultima_entrada.data }}</td>
+                      <td>{{ ultima_entrada.nf }}</td>
+                      <td>{{ ultima_entrada.fornecedor }}</td>
+                      <td class="text-center">{{ ultima_entrada.produto }}</td>
+                      <td class="text-center">{{ ultima_entrada.peso_liquido }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                      <td colspan="5" class="text-center py-3">
+                        Nenhuma entrada encontrada.
+                      </td>
+                    </tr>
+                    {% endif %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="tab-content" id="aba4">

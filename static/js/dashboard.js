@@ -96,4 +96,47 @@ document.addEventListener('DOMContentLoaded', () => {
       frame.style.overflowX = 'hidden';
     }
   });
+
+  ['ultima-entrada-frame', 'saida-nf-frame'].forEach(function(id) {
+    const frame = document.getElementById(id);
+    if (!frame) return;
+
+    const tbody = frame.querySelector('tbody');
+    if (!tbody) return;
+
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    const rowCount = rows.length;
+
+    // se tiver 10 ou menos linhas, remove qualquer limitação
+    if (rowCount <= 10) {
+      frame.style.maxHeight = '';
+      frame.style.overflowY = '';
+      frame.style.overflowX = '';
+      return;
+    }
+
+    // mede altura do thead (se existir) e da primeira linha como referência
+    const thead = frame.querySelector('thead');
+    let headerHeight = 0;
+    if (thead) {
+      const thRect = thead.getBoundingClientRect();
+      headerHeight = thRect.height || 0;
+    }
+
+    // pega a primeira linha com altura válida
+    let rowHeight = 0;
+    for (const r of rows) {
+      const rect = r.getBoundingClientRect();
+      if (rect.height > 0) { rowHeight = rect.height; break; }
+    }
+    // fallback caso não encontre (valor conservador)
+    if (!rowHeight) rowHeight = parseFloat(getComputedStyle(rows[0]).height) || 30;
+
+    // calcula altura para 10 linhas + cabeçalho e aplica
+    const maxPx = Math.round(headerHeight + rowHeight * 10);
+    frame.style.maxHeight = maxPx + 'px';
+    frame.style.overflowY = 'auto';
+    frame.style.overflowX = 'hidden';
+  });
+  
 });

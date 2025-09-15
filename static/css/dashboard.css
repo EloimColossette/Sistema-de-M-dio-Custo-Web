@@ -169,7 +169,6 @@ body {
   color: #4c51bf; /* cor roxa ou azul moderna */
 }
 
-
 .dropdown {
   display: none;
 }
@@ -536,3 +535,21 @@ body {
 .report-table table td:nth-child(5) { width: 180px; }
 .report-table table th:nth-child(6),
 .report-table table td:nth-child(6) { width: 120px; }
+
+/* Corrige alinhamento da coluna "Produto" na tabela de Última Entrada
+   - cabeçalho (th) centralizado
+   - células (td) alinhadas à direita */
+#saida-nf-frame,
+#ultima-entrada-frame {
+  max-height: 450px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#ultima-entrada-frame table th:nth-child(4) {
+  text-align: center !important;
+}
+
+#ultima-entrada-frame table td:nth-child(4) {
+  text-align: right !important;
+}

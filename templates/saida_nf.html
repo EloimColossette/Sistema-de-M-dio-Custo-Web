@@ -208,6 +208,10 @@
                   <tr><td colspan="9" class="no-data">Nenhuma NF cadastrada.</td></tr>
                 {% endfor %}
               </tbody>
+              <!-- BLOCO DE TOTAIS PARA ITENS SELECIONADOS -->
+              <div id="selectedTotals" style="display:none; margin-top:12px; background:#fafafa; border:1px solid #eee; padding:10px; border-radius:6px;">
+                <div id="totalsContent" style="font-size:0.95rem; color:#222;"></div>
+              </div>
             </table>
           <div class="pagination" style="text-align:center; margin:8px 0;">
             {% if page > 1 %}

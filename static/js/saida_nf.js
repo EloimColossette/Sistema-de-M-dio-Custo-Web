@@ -883,6 +883,128 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // === Funções de parsing/formatacao ===
+  function parsePesoTextToNumber(text) {
+    if (!text) return 0;
+    let t = String(text).trim();
+    // remove "Kg" e quaisquer letras e espaços no final/início
+    t = t.replace(/[^\d,.\-]/g, ''); // mantém dígitos, vírgula, ponto e eventual sinal
+    // heurística: se houver vírgula, considera formato pt-BR (123,456)
+    // remover pontos que atuem como separador de milhares (heurística)
+    // primeiro remova pontos que estejam entre 1-3 dígitos seguidos por vírgula ou fim
+    t = t.replace(/\.(?=\d{3}([,\.]|$))/g, '');
+    // transforma vírgula decimal em ponto
+    t = t.replace(',', '.');
+    const n = parseFloat(t);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function formatPesoShort(n) {
+    if (Math.abs(n - Math.round(n)) < 0.0005) {
+      return String(Math.round(n)); // inteiro sem decimais
+    }
+    return n.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  }
+
+  // === Função principal: agrega por base_produto e mostra total geral ===
+  function showAggregatedByBase() {
+    const selectedBoxes = Array.from(document.querySelectorAll('#modal-nfs tbody .select-row:checked'));
+    const totalsEl = document.getElementById('selectedTotals');
+    const contentEl = document.getElementById('totalsContent');
+    if (!totalsEl || !contentEl) return;
+
+    if (selectedBoxes.length === 0) {
+      totalsEl.style.display = 'none';
+      contentEl.innerHTML = '';
+      return;
+    }
+
+    // Agrupa por base (string exata da célula de Base Produto)
+    const map = {}; // { base: somaPeso }
+    let totalGeral = 0;
+
+    selectedBoxes.forEach(cb => {
+      const tr = cb.closest('tr');
+      if (!tr) return;
+      // conforme seu template: Base está na coluna índice 7
+      const baseCell = tr.children[7];
+      const pesoCell = tr.children[4];
+      const base = baseCell ? baseCell.textContent.trim() : 'Sem Base';
+      const pesoTxt = pesoCell ? pesoCell.textContent.trim() : '0';
+      const pesoNum = parsePesoTextToNumber(pesoTxt);
+      if (!map[base]) map[base] = 0;
+      map[base] += pesoNum;
+      totalGeral += pesoNum;
+    });
+
+    // Monta HTML: uma linha por base com peso agregado
+    let html = '<div style="display:flex; flex-direction:column; gap:6px;">';
+    for (const base of Object.keys(map)) {
+      const soma = map[base];
+      // pula zeros (opcional)
+      if (Math.abs(soma) < 1e-9) continue;
+      html += `<div style="font-weight:700;">${base} ${formatPesoShort(soma)}</div>`;
+    }
+
+    // Total geral
+    html += `<div style="margin-top:6px; border-top:1px dashed #e6e6e6; padding-top:6px; font-weight:800;">
+              Total ${formatPesoShort(totalGeral)}
+            </div>`;
+
+    html += '</div>';
+
+    contentEl.innerHTML = html;
+    totalsEl.style.display = 'block';
+  }
+
+  // Limpa exibição (usar ao recarregar modal)
+  function clearAggregatedTotalsDisplay() {
+    const totalsEl = document.getElementById('selectedTotals');
+    const contentEl = document.getElementById('totalsContent');
+    if (totalsEl && contentEl) {
+      totalsEl.style.display = 'none';
+      contentEl.innerHTML = '';
+    }
+  }
+
+  /* -------------------------
+    Integração com seleções
+    ------------------------- */
+  // fallback updateDeleteBtnVisibility se não existir
+  if (typeof updateDeleteBtnVisibility !== 'function') {
+    window.updateDeleteBtnVisibility = function() {
+      const deleteBtn = document.getElementById('deleteSelectedBtn');
+      const anyChecked = Array.from(document.querySelectorAll('#modal-nfs tbody .select-row'))
+        .some(cb => cb.checked);
+      if (deleteBtn) deleteBtn.style.display = anyChecked ? 'inline-block' : 'none';
+    };
+  }
+
+  // 1) selectAll
+  const selectAllCheckbox = document.getElementById('selectAll');
+  if (selectAllCheckbox) {
+    selectAllCheckbox.addEventListener('change', e => {
+      document.querySelectorAll('#modal-nfs tbody .select-row')
+        .forEach(cb => cb.checked = e.target.checked);
+      updateDeleteBtnVisibility();
+      showAggregatedByBase();
+    });
+  }
+
+  // 2) mudança em qualquer checkbox de linha
+  document.querySelectorAll('#modal-nfs tbody').forEach(tbody => {
+    tbody.addEventListener('change', e => {
+      if (e.target.matches('.select-row')) {
+        updateDeleteBtnVisibility();
+        showAggregatedByBase();
+      }
+    });
+  });
+
+  // 3) limpeza após recarregar modal — chame clearAggregatedTotalsDisplay() ao final de refreshModalPage()
+  // também fornecemos um listener para uso manual:
+  window.addEventListener('modalRefreshCleanup', clearAggregatedTotalsDisplay);
+
   // fechar modal de observação
   document.getElementById('modalObsClose').addEventListener('click', () =>
     document.getElementById('modal-obs').classList.remove('show')

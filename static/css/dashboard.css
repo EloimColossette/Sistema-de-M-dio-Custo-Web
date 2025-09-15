@@ -536,12 +536,119 @@ body {
 .report-table table th:nth-child(6),
 .report-table table td:nth-child(6) { width: 120px; }
 
+/* === Grouped NF styles === */
+.nf-row {
+  background: linear-gradient(90deg, rgba(102,126,234,0.04), transparent);
+  font-weight: 600;
+  border-left: 4px solid transparent;
+  transition: border-color .18s ease, background .12s ease;
+}
+.nf-row.open {
+  border-left-color: var(--color-primary);
+}
+
+.nf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-secondary);
+  font-weight: 600;
+  padding: 6px 0;
+}
+
+.chev {
+  display: inline-block;
+  font-size: 0.9rem;
+  transform: rotate(0deg);
+  transition: transform .18s ease;
+}
+
+.nf-row.open .chev {
+  transform: rotate(90deg);
+}
+
+.total-label {
+  font-size: 0.75rem;
+  color: #718096;
+  font-weight: 600;
+  margin-bottom: 2px;
+  text-transform: uppercase;
+}
+
+.total-value {
+  font-weight: 700;
+  color: var(--color-secondary);
+  font-size: 0.98rem;
+}
+
+.count-badge {
+  display: inline-block;
+  margin-left: 8px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+  line-height: 1;
+  cursor: default; /* não parece clicável */
+}
+
+.nf-summary { text-align: left; }
+.nf-total-peso { font-weight: 700; color: var(--color-secondary); }
+.nf-client, .nf-base { color: #2d3748; }
+.nf-summary strong { display: block; }
+.nf-summary .muted { display: inline-block; margin-left: 6px; color: #718096; font-size: 0.95rem; }
+
+/* Product rows */
+.product-row td {
+  background: #ffffff;
+  font-weight: 400;
+  color: var(--color-text);
+  border-top: 0;
+}
+.product-row.hidden { display: none; }
+
+.product-name {
+  padding-left: 8px;
+  text-align: left;
+}
+
+/* Muted small text */
+.muted {
+  color: #718096;
+  font-weight: 500;
+  margin-left: 8px;
+  font-size: 0.95rem;
+}
+
+/* Expand/Collapse all button area */
+.report-card .controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0.5rem 1rem;
+}
+.report-card .controls button {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+.report-card .controls button:hover {
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+}
+
 /* Corrige alinhamento da coluna "Produto" na tabela de Última Entrada
    - cabeçalho (th) centralizado
    - células (td) alinhadas à direita */
 #saida-nf-frame,
 #ultima-entrada-frame {
-  max-height: 450px;
   overflow-y: auto;
   overflow-x: hidden;
 }

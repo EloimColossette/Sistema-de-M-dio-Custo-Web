@@ -181,22 +181,66 @@
                     </tr>
                   </thead>
                   <tbody>
-                    {% for item in ultimas_saidas %}
-                    <tr>
-                      <td>{{ item.data }}</td>
-                      <td>{{ item.nf }}</td>
-                      <td>{{ item.produto }}</td>
-                      <td class="text-right">{{ item.peso }}</td>
-                      <td>{{ item.cliente }}</td>
-                      <td>{{ item.base }}</td>
-                    </tr>
+                    {% if ultimas_saidas %}
+                      {% for nf in ultimas_saidas %}
+                        {# cria um índice reutilizável para cada NF #}
+                        {% set nf_idx = loop.index0 %}
+
+                        <!-- Linha PAI - NF -->
+                        <tr class="nf-row" data-nf="{{ nf_idx }}">
+                          <td class="nf-toggle">
+                            <button class="nf-btn" type="button" aria-expanded="false" data-nf="{{ nf_idx }}">
+                              <span class="chev">▶</span>
+                              <span class="nf-date">{{ nf.data }}</span>
+                            </button>
+                          </td>
+
+                          <td class="nf-number">
+                            <strong>{{ nf.nf }}</strong>
+                            <!-- badge mostra "N itens" e title lista os produtos -->
+                            <span
+                              class="count-badge"
+                              title="{{ nf.products|map(attribute='produto')|join(' — ') }}"
+                              aria-label="{{ nf.products|length }} itens">
+                              {{ nf.products|length }} {{ 'item' if nf.products|length == 1 else 'itens' }}
+                            </span>
+                          </td>
+
+                          <td class="nf-summary">
+                            <strong>{{ nf.products[0].produto }}</strong>
+                            {% if nf.products|length > 1 %}
+                              <span class="muted">e mais {{ nf.products|length - 1 }} {{ 'produto' if (nf.products|length - 1) == 1 else 'produtos' }}</span>
+                            {% endif %}
+                          </td>
+
+                          <!-- Deixa bem claro que é o PESO TOTAL da NF -->
+                          <td class="text-right nf-total-peso">
+                            <div class="total-label">Total</div>
+                            <div class="total-value">{{ nf.total_peso }}</div>
+                          </td>
+
+                          <td class="nf-client">{{ nf.cliente }}</td>
+                          <td class="nf-base">{{ nf.base }}</td>
+                        </tr>
+
+                        <!-- Linhas FILHAS - produtos da NF (usando nf_idx) -->
+                        {% for prod in nf.products %}
+                        <tr class="product-row hidden" data-nf="{{ nf_idx }}">
+                          <td></td>
+                          <td></td>
+                          <td class="product-name">• {{ prod.produto }}</td>
+                          <td class="text-right">{{ prod.peso }}</td>
+                          <td colspan="2"></td>
+                        </tr>
+                        {% endfor %}
+                      {% endfor %}
                     {% else %}
-                    <tr>
-                      <td colspan="6" class="text-center py-3">
-                        Nenhuma saída de NF encontrada.
-                      </td>
-                    </tr>
-                    {% endfor %}
+                      <tr>
+                        <td colspan="6" class="text-center py-3">
+                          Nenhuma saída de NF encontrada.
+                        </td>
+                      </tr>
+                    {% endif %}
                   </tbody>
                 </table>
               </div>

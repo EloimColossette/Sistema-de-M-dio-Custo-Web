@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, session
 from routes.auth_routes import login_required
 from conexao_db import conectar
+from collections import OrderedDict
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
@@ -59,7 +60,7 @@ def dashboard():
                   SELECT CAST(MAX(data) AS date) FROM nf
                 )
                 ORDER BY nf.data DESC, nf.numero_nf, p.produto_nome
-                LIMIT 10
+                LIMIT 100
             """)
             raw_saidas = cursor.fetchall()
         except Exception:
@@ -102,10 +103,17 @@ def dashboard():
             ultima_entrada = None
 
     finally:
-        cursor.close()
-        conexao.close()
+        # garante fechamento de conexões
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        try:
+            conexao.close()
+        except Exception:
+            pass
 
-    # helper de formatação para saídas
+    # --- Helpers de formatação (usados no agrupamento) ---
     def fmt_data(d):
         try:
             return d.strftime("%d/%m/%Y") if hasattr(d, "strftime") else (d or '')
@@ -117,25 +125,67 @@ def dashboard():
             s = f"{float(v):,.3f}"
             return s.replace(",", "X").replace(".", ",").replace("X", ".") + " Kg"
         except:
-            return v or ''
+            return str(v) if v is not None else ''
 
-    ultimas_saidas = [
-        {
-            "data":    fmt_data(row[0]),
-            "nf":      row[1],
-            "cliente": row[2],
-            "produto": row[3],
-            "peso":    fmt_peso(row[4]),
-            "base":    row[5] or ""
-        }
-        for row in raw_saidas
-    ]
+    # --- Agrupa raw_saidas por número de NF e soma pesos ---
+    grouped = OrderedDict()
+    for row in raw_saidas or []:
+        # row esperado: (data, numero_nf, cliente, produto_nome, peso, base_produto)
+        data_raw = row[0]
+        nf_num    = row[1] or ''
+        cliente   = row[2] or ''
+        produto   = row[3] or ''
+        peso_raw  = row[4] or 0
+        base      = row[5] or ''
 
+        # chave por NF (string)
+        key = str(nf_num)
+
+        if key not in grouped:
+            grouped[key] = {
+                "nf": nf_num,
+                "data": fmt_data(data_raw),
+                "cliente": cliente,
+                "base": base,
+                "products": [],
+                "total_peso_raw": 0.0
+            }
+
+        # tenta converter peso para float (fallback 0.0)
+        try:
+            peso_val = float(peso_raw)
+        except Exception:
+            peso_val = 0.0
+
+        grouped[key]["products"].append({
+            "produto": produto or '',
+            "peso_raw": peso_val,
+            "peso": fmt_peso(peso_val)
+        })
+        grouped[key]["total_peso_raw"] += peso_val
+
+    # formata total por NF, cria preview seguro dos nomes dos produtos e transforma em lista preservando ordem
+    ultimas_saidas_grouped = []
+    for v in grouped.values():
+        # total formatado
+        v["total_peso"] = fmt_peso(v.get("total_peso_raw", 0.0))
+
+        # cria preview dos nomes dos produtos (string curta, segura)
+        nomes = [p.get('produto', '') for p in v['products'] if p.get('produto')]
+        preview = ' — '.join(nomes)
+        # limita tamanho do tooltip para algo legível (ajuste o 160 se quiser)
+        if len(preview) > 160:
+            preview = preview[:157].rsplit(' ', 1)[0] + '...'
+        v['products_preview'] = preview
+
+        ultimas_saidas_grouped.append(v)
+
+    # passa para o template a estrutura agrupada
     return render_template(
         'dashboard.html',
         nome_usuario=nome_usuario,
         produtos=produtos,
         materiais=materiais,
-        ultimas_saidas=ultimas_saidas,
+        ultimas_saidas=ultimas_saidas_grouped,
         ultima_entrada=ultima_entrada
     )

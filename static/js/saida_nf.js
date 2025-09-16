@@ -308,6 +308,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const trNew = document.createElement('tr');
       trNew.dataset.id  = item.id;
       trNew.dataset.obs = item.observacao;
+
+      // define dataset.read com prioridade para valor vindo do servidor
+      if (typeof item.lida !== 'undefined') {
+        trNew.dataset.read = item.lida ? '1' : '0';
+      } else {
+        trNew.dataset.read = (localStorage.getItem(`nfRead_${item.id}`) === 'true') ? '1' : '0';
+      }
+
       trNew.innerHTML = `
         <td><input type="checkbox" class="select-row"></td>
         <td>${item.data}</td>
@@ -343,6 +351,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const tr = document.createElement('tr');
       tr.dataset.id  = item.id;
       tr.dataset.obs = item.observacao;
+
+      // define dataset.read com prioridade para valor vindo do servidor
+      if (typeof item.lida !== 'undefined') {
+        tr.dataset.read = item.lida ? '1' : '0';
+      } else {
+        tr.dataset.read = (localStorage.getItem(`nfRead_${item.id}`) === 'true') ? '1' : '0';
+      }
 
       const primeiro = item.produtos[0] || { nome: '', peso: 0, base: '' };
 
@@ -458,6 +473,46 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape') closeModal();
   });
 
+  // >>> inserir essa função utilitária em um lugar global após modalTbody ser definido
+  function setObsForAllRows(nfId, obsValue) {
+    const rows = document.querySelectorAll(`#modal-nfs tbody tr[data-id="${nfId}"]`);
+    rows.forEach(r => {
+      if (obsValue && obsValue.trim() !== '') {
+        r.dataset.obs = obsValue;
+        // marca como "não lida" via atributo (prioritário sobre localStorage)
+        r.dataset.read = '0';
+        try { localStorage.removeItem(`nfRead_${nfId}`); } catch (e) { /* swallow */ }
+      } else {
+        // remove atributo quando não há observação
+        delete r.dataset.obs;
+        // ausência de observação -> não faz sentido ter flag de leitura
+        delete r.dataset.read;
+        try { localStorage.removeItem(`nfRead_${nfId}`); } catch (e) { /* swallow */ }
+      }
+    });
+  }
+
+  // marca a observação em todas as linhas como "lida" (🔕)
+  function markObsRead(nfId) {
+    const key = `nfRead_${nfId}`;
+    try { localStorage.setItem(key, 'true'); } catch(e){}
+    document.querySelectorAll(`#modal-nfs tbody tr[data-id="${nfId}"]`).forEach(r => {
+      r.dataset.read = '1';
+      const btn = r.querySelector('.obs-icon');
+      if (btn) btn.textContent = '🔕';
+    });
+  }
+
+  function markObsUnread(nfId) {
+    const key = `nfRead_${nfId}`;
+    try { localStorage.removeItem(key); } catch(e){}
+    document.querySelectorAll(`#modal-nfs tbody tr[data-id="${nfId}"]`).forEach(r => {
+      r.dataset.read = '0';
+      const btn = r.querySelector('.obs-icon');
+      if (btn) btn.textContent = '🔔';
+    });
+  }
+
   // --- SETUP do conteúdo do modal ---
   function setupNFList() {
     document.querySelectorAll('#modal-nfs tbody tr[data-id]').forEach(tr => {
@@ -469,17 +524,26 @@ document.addEventListener('DOMContentLoaded', () => {
       // 1) Sino de observação (quando já existe obs)
       if (obs) {
         const key   = `nfRead_${nfId}`;
-        const read  = localStorage.getItem(key) === 'true';
+        // prioridade: dataset.read (se definido) -> localStorage -> default false
+        let read;
+        if (typeof tr.dataset.read !== 'undefined') {
+          read = tr.dataset.read === '1';
+        } else {
+          read = localStorage.getItem(key) === 'true';
+        }
+
         const bell  = document.createElement('span');
         bell.className   = 'icon obs-icon';
         bell.title       = 'Ver Observação';
         bell.textContent = read ? '🔕' : '🔔';
         bell.style.cursor = 'pointer';
         bell.addEventListener('click', () => {
-          if (!localStorage.getItem(key)) {
-            bell.textContent = '🔕';
-            localStorage.setItem(key, 'true');
+          // re-evalua o estado atual (priorizando dataset)
+          const currentRead = (typeof tr.dataset.read !== 'undefined') ? tr.dataset.read === '1' : (localStorage.getItem(key) === 'true');
+          if (!currentRead) {
+            markObsRead(nfId);
           }
+
           const modal = document.getElementById('modal-obs');
           const view = modal.querySelector('#view-mode');
           const edit = modal.querySelector('#edit-mode');
@@ -514,8 +578,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (!resp.ok) return alert('Erro ao salvar observação.');
 
-            tr.dataset.obs = novaObs;
-            localStorage.removeItem(`nfRead_${nfId}`);
+            // atualiza TODAS as linhas e marca como "não lida" (porque foi alterada)
+            setObsForAllRows(nfId, novaObs);
+            markObsUnread(nfId);
             obs = novaObs;
 
             modal.classList.remove('show');
@@ -529,7 +594,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (!resp.ok) return alert('Erro ao excluir observação.');
 
-            tr.dataset.obs = '';
+            // limpa a obs em todas as linhas e marca como "não lida" (ou apenas remove a flag)
+            setObsForAllRows(nfId, '');
+            try { localStorage.removeItem(`nfRead_${nfId}`); } catch(e){}
             modal.classList.remove('show');
             setupNFList();
           };
@@ -581,7 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
           });
           if (!resp.ok) return alert('Erro ao salvar.');
 
-          tr.dataset.obs = novaObs;
+          setObsForAllRows(nfId, novaObs);
           obs = novaObs;
           localStorage.removeItem(`nfRead_${nfId}`);
           modal.classList.remove('show');
@@ -594,7 +661,7 @@ document.addEventListener('DOMContentLoaded', () => {
             method: 'DELETE'
           });
           if (!resp.ok) return alert('Erro ao excluir.');
-          tr.dataset.obs = '';
+          setObsForAllRows(nfId, '');
           obs = '';
           modal.classList.remove('show');
           setupNFList();
@@ -832,7 +899,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function parsePesoTextToNumber(text) {
     if (!text) return 0;
     let t = String(text).trim();
-    t = t.replace(/[^\d,.\-]/g, '');
+    t = t.replace(/[^\d,.-]/g, '');
     t = t.replace(/\.(?=\d{3}([,\.]|$))/g, '');
     t = t.replace(',', '.');
     const n = parseFloat(t);

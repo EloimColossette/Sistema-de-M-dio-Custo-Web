@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify, current_app
 from routes.auth_routes import login_required
 from conexao_db import conectar
 from psycopg2.extras import execute_values
@@ -705,3 +705,69 @@ def importar_excel():
         flash(f'Erro na importação: {e}', 'danger')
 
     return redirect(url_for('saida_nf.saida_nf'))
+
+@saida_nf_bp.route('/agregacao_selecao', methods=['GET'])
+@login_required
+def agregacao_selecao():
+    """
+    Retorna agregados (soma de peso por base_produto e total geral) respeitando
+    o termo de busca opcional 'search'. Usada quando o usuário marca o checkbox
+    do cabeçalho para selecionar NFs de todas as páginas.
+    Resposta JSON:
+      { "totals": { "Base A": 123.456, ... }, "total": 456.789 }
+    """
+    pesquisa = request.args.get('search', '').strip()
+
+    conexao = conectar()
+    cursor = conexao.cursor()
+
+    # Monta filtro simples: procura em numero_nf, cliente e cnpj_cpf
+    filtros = []
+    parametros = []
+
+    if pesquisa:
+        like = f"%{pesquisa}%"
+        filtros.append("(nf.numero_nf::text ILIKE %s OR nf.cliente ILIKE %s OR nf.cnpj_cpf ILIKE %s)")
+        parametros.extend([like, like, like])
+
+    clausula_where = "WHERE " + " AND ".join(filtros) if filtros else ""
+
+    # Query: soma por base_produto (agrupa por base) e soma total geral
+    sql = f"""
+        SELECT COALESCE(p.base_produto, 'Sem Base') AS base, SUM(p.peso)::numeric AS soma
+        FROM produtos_nf p
+        JOIN nf ON nf.id = p.nf_id
+        {clausula_where}
+        GROUP BY COALESCE(p.base_produto, 'Sem Base')
+        ORDER BY COALESCE(p.base_produto, 'Sem Base')
+    """
+
+    try:
+        cursor.execute(sql, parametros)
+        linhas = cursor.fetchall()  # [(base, soma), ...]
+
+        # Converte para formato JSON-friendly (Decimal -> float)
+        totais = { linha[0]: float(linha[1]) for linha in linhas }
+
+        # total geral
+        cursor.execute(f"""
+            SELECT COALESCE(SUM(p.peso), 0) FROM produtos_nf p
+            JOIN nf ON nf.id = p.nf_id
+            {clausula_where}
+        """, parametros)
+        linha_total = cursor.fetchone()
+        total_geral = float(linha_total[0]) if linha_total and linha_total[0] is not None else 0.0
+
+        # Retorna chaves 'totals' e 'total' para manter compatibilidade com o front-end
+        return jsonify({'totals': totais, 'total': total_geral}), 200
+
+    except Exception as e:
+        current_app.logger.exception('Erro agregando seleção global')
+        return jsonify({'error': str(e)}), 500
+
+    finally:
+        try:
+            cursor.close()
+            conexao.close()
+        except Exception:
+            pass

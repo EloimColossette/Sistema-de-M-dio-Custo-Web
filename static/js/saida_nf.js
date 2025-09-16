@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .join(' ');
   }
+
   // --- VARIÁVEIS GLOBAIS ---
   const produtosList = document.getElementById('produtosList');
   const addBtn       = document.getElementById('addProdBtn');
@@ -42,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- FUNÇÃO: renderList (form principal) ---
   function renderList() {
+    if (!produtosList) return;
     produtosList.innerHTML = produtos.map((p, idx) => {
       const [nome, peso, base] = p.split('|');
       return `
@@ -96,9 +98,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // 2) Dropdown inline de Base
-        const opts = Array.from(baseList.children)
+        const opts = baseList ? Array.from(baseList.children)
           .map(li => `<li data-value="${li.dataset.value}">${li.textContent}</li>`)
-          .join('');
+          .join('') : '';
         tds[2].innerHTML = `
           <div class="dropdown-container-inline">
             <div class="dropdown-input-inline" tabindex="0">
@@ -109,19 +111,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const dd     = tds[2].querySelector('.dropdown-input-inline');
         const ddList = tds[2].querySelector('.dropdown-list-inline');
         let selBaseInline = base;
-        dd.addEventListener('click', () => ddList.classList.toggle('show'));
-        ddList.querySelectorAll('li').forEach(li => {
-          li.addEventListener('click', () => {
-            selBaseInline = li.dataset.value;
-            dd.querySelector('.placeholder-inline').textContent = li.textContent;
-            ddList.classList.remove('show');
+        if (dd) {
+          dd.addEventListener('click', () => ddList.classList.toggle('show'));
+          ddList.querySelectorAll('li').forEach(li => {
+            li.addEventListener('click', () => {
+              selBaseInline = li.dataset.value;
+              dd.querySelector('.placeholder-inline').textContent = li.textContent;
+              ddList.classList.remove('show');
+            });
           });
-        });
-        document.addEventListener('click', ev => {
-          if (!dd.contains(ev.target) && !ddList.contains(ev.target)) {
-            ddList.classList.remove('show');
-          }
-        });
+          document.addEventListener('click', ev => {
+            if (!dd.contains(ev.target) && !ddList.contains(ev.target)) {
+              ddList.classList.remove('show');
+            }
+          });
+        }
 
          // 3) Troca ações por botões salvar e cancelar
         tds[3].innerHTML = '';
@@ -158,126 +162,131 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- adicionar produto (form principal) ---
-  addBtn.addEventListener('click', () => {
-    const nome = document.getElementById('prodNome').value.trim();
-    const peso = document.getElementById('prodPeso').value.trim();
-    if (!nome || !peso || !selectedBase) {
-      alert('Preencha nome, peso e base do produto.');
-      return;
-    }
-    produtos.push(`${nome}|${peso}|${selectedBase}`);
-    renderList();
-    document.getElementById('prodNome').value = '';
-    document.getElementById('prodPeso').value = '';
-    baseInput.querySelector('.placeholder').textContent = 'Selecione';
-    selectedBase = '';
-  });
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      const nome = document.getElementById('prodNome').value.trim();
+      const peso = document.getElementById('prodPeso').value.trim();
+      if (!nome || !peso || !selectedBase) {
+        alert('Preencha nome, peso e base do produto.');
+        return;
+      }
+      produtos.push(`${nome}|${peso}|${selectedBase}`);
+      renderList();
+      document.getElementById('prodNome').value = '';
+      document.getElementById('prodPeso').value = '';
+      if (baseInput) baseInput.querySelector('.placeholder').textContent = 'Selecione';
+      selectedBase = '';
+    });
+  }
 
   // --- injetar hidden inputs antes de enviar NF ---
-  form.onsubmit = () => {
-    form.querySelectorAll('input[name="produtos[]"]').forEach(i => i.remove());
-    produtos.forEach(p => {
-      const inp = document.createElement('input');
-      inp.type  = 'hidden';
-      inp.name  = 'produtos[]';
-      inp.value = p;
-      form.appendChild(inp);
-    });
-    return true;
-  };
+  if (form) {
+    form.onsubmit = () => {
+      form.querySelectorAll('input[name="produtos[]"]').forEach(i => i.remove());
+      produtos.forEach(p => {
+        const inp = document.createElement('input');
+        inp.type  = 'hidden';
+        inp.name  = 'produtos[]';
+        inp.value = p;
+        form.appendChild(inp);
+      });
+      return true;
+    };
+  }
 
   // --- Máscara de CNPJ/CPF ---
   const cnpjCpfInput = document.getElementById('cnpj_nf');
-  cnpjCpfInput.addEventListener('input', e => {
-    let v = e.target.value.replace(/\D/g, '');
-    if (v.length <= 11) {
-      // CPF: 000.000.000-00
-      v = v.replace(/(\d{3})(\d)/, '$1.$2');
-      v = v.replace(/(\d{3})(\d)/, '$1.$2');
-      v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
-    } else {
-      // CNPJ: 00.000.000/0000-00
-      v = v.replace(/^(\d{2})(\d)/, '$1.$2');
-      v = v.replace(/^(\d{2}\.\d{3})(\d)/, '$1.$2');
-      v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
-      v = v.replace(/(\d{4})(\d{1,2})$/, '$1-$2');
-    }
-    e.target.value = v;
-  });
+  if (cnpjCpfInput) {
+    cnpjCpfInput.addEventListener('input', e => {
+      let v = e.target.value.replace(/\D/g, '');
+      if (v.length <= 11) {
+        // CPF: 000.000.000-00
+        v = v.replace(/(\d{3})(\d)/, '$1.$2');
+        v = v.replace(/(\d{3})(\d)/, '$1.$2');
+        v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+      } else {
+        // CNPJ: 00.000.000/0000-00
+        v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+        v = v.replace(/^(\d{2}\.\d{3})(\d)/, '$1.$2');
+        v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+        v = v.replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+      }
+      e.target.value = v;
+    });
+  }
 
   // --- Formatação de Peso inline no formulário principal ---
   const pesoInput = document.getElementById('prodPeso');
+  if (pesoInput) {
+    pesoInput.addEventListener('input', () => {
+      let val = pesoInput.value.replace(/\D/g, '');
+      if (val.length > 3) {
+        const inteiro  = val.slice(0, val.length - 3);
+        const decimais = val.slice(-3);
+        pesoInput.value = `${parseInt(inteiro)},${decimais}`;
+      } else {
+        pesoInput.value = `0,${val.padStart(3, '0')}`;
+      }
+    });
 
-  pesoInput.addEventListener('input', () => {
-    let val = pesoInput.value.replace(/\D/g, '');
-    if (val.length > 3) {
-      const inteiro  = val.slice(0, val.length - 3);
-      const decimais = val.slice(-3);
-      pesoInput.value = `${parseInt(inteiro)},${decimais}`;
-    } else {
-      pesoInput.value = `0,${val.padStart(3, '0')}`;
-    }
-  });
+    pesoInput.addEventListener('blur', e => {
+      let raw = e.target.value.replace(/\D/g, '');
+      if (!raw) {
+        e.target.value = '';
+        return;
+      }
+      raw = raw.padStart(4, '0');
+      const intPart = raw.slice(0, -3);
+      const decPart = raw.slice(-3);
+      const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+      e.target.value = `${intFormatted},${decPart}`;
+    });
+  }
 
-  pesoInput.addEventListener('blur', e => {
-    let raw = e.target.value.replace(/\D/g, '');
-    if (!raw) {
-      e.target.value = '';
-      return;
-    }
+  if (cnpjCpfInput) {
+    cnpjCpfInput.addEventListener('blur', async e => {
+      const raw = e.target.value.replace(/\D/g, '');
 
-    // Garante pelo menos 4 dígitos para não quebrar
-    raw = raw.padStart(4, '0');
-    const intPart = raw.slice(0, -3);
-    const decPart = raw.slice(-3);
+      if (raw.length === 11) {
+        // CPF – busca local
+        try {
+          const resp = await fetch(`/saida_nf/buscar_cliente/${raw}`);
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.nome) {
+              const nomeFormatado = capitalizeWords(data.nome);
+              document.getElementById('cliente_nf').value = nomeFormatado;
+            }
+          }
+        } catch (err) {
+          console.error('Erro ao consultar CPF local:', err);
+        }
+      }
 
-    // Formata parte inteira com separador de milhar
-    const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    e.target.value = `${intFormatted},${decPart}`;
-  });
-
-  cnpjCpfInput.addEventListener('blur', async e => {
-    const raw = e.target.value.replace(/\D/g, '');
-
-    if (raw.length === 11) {
-      // CPF – busca local
-      try {
-        const resp = await fetch(`/saida_nf/buscar_cliente/${raw}`);
-        if (resp.ok) {
+      if (raw.length === 14) {
+        // CNPJ – busca via ReceitaWS
+        try {
+          const resp = await fetch(`/saida_nf/buscar_empresa/${raw}`);
           const data = await resp.json();
           if (data.nome) {
-          const nomeFormatado = capitalizeWords(data.nome);
-          document.getElementById('cliente_nf').value = nomeFormatado;
+            const nomeFormatado = capitalizeWords(data.nome);
+            document.getElementById('cliente_nf').value = nomeFormatado;
+          }
+        } catch (err) {
+          console.error('Erro ao consultar CNPJ na ReceitaWS:', err);
         }
-        }
-      } catch (err) {
-        console.error('Erro ao consultar CPF local:', err);
       }
-    }
-
-    if (raw.length === 14) {
-      // CNPJ – busca via ReceitaWS
-      try {
-        const resp = await fetch(`/saida_nf/buscar_empresa/${raw}`);
-        const data = await resp.json();
-        if (data.nome) {
-          const nomeFormatado = capitalizeWords(data.nome);
-          document.getElementById('cliente_nf').value = nomeFormatado;
-        }
-      } catch (err) {
-        console.error('Erro ao consultar CNPJ na ReceitaWS:', err);
-      }
-    }
-  });
+    });
+  }
 
   renderList();
-  
 
   // --- PAGINAÇÃO DO MODAL ----
   let currentPage = Number(new URLSearchParams(window.location.search).get('page')) || 1;
   const perPage    = 10;  // deve bater com o backend
   const modalTbody = document.querySelector('#modal-nfs tbody');
   let totalPages;         // vamos preencher na abertura do modal
+
   async function loadNextModalItems(count) {
     const nextPage = currentPage + 1;
     if (nextPage > totalPages) {
@@ -289,7 +298,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!resp.ok) throw new Error('Erro ao carregar próximas NFs');
     const json = await resp.json();
 
-    // Se vier linhas, avançamos a página
     if (json.rows.length > 0) {
       currentPage = nextPage;
     }
@@ -316,6 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- FUNÇÃO DE RECARREGAR PÁGINA DO MODAL ---
   async function refreshModalPage() {
     // 1) limpa todas as linhas atuais
+    if (!modalTbody) return;
     modalTbody.innerHTML = '';
 
     // 2) busca a página corrente
@@ -332,11 +341,9 @@ document.addEventListener('DOMContentLoaded', () => {
       tr.dataset.id  = item.id;
       tr.dataset.obs = item.observacao;
 
-      // Pega o primeiro produto (ou vazio, se não houver)
       const primeiro = item.produtos[0] || { nome: '', peso: 0, base: '' };
 
-      // Formata o peso
-      const pesoFmt = Number(primeiro.peso)
+      const pesoFmt = Number(primeiro.peso || 0)
         .toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + ' Kg';
 
       tr.innerHTML = `
@@ -356,6 +363,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 5) reaplica todos os event listeners
     setupNFList();
+
+    // garante limpeza visual ao recarregar
+    window.dispatchEvent(new Event('modalRefreshCleanup'));
+    const selectAllEl = document.getElementById('selectAll');
+    if (selectAllEl) selectAllEl.checked = false;
+    const deleteBtn = document.getElementById('deleteSelectedBtn');
+    if (deleteBtn) deleteBtn.style.display = 'none';
   }
 
   // --- MODAL DE NFS CADASTRADAS ---
@@ -365,7 +379,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   abrirModalBtn.addEventListener('click', async () => {
     modalNfs.classList.add('show');
-    
+
     // mostra loading, esconde conteúdo
     document.getElementById('modal-loading').style.display = 'block';
     document.getElementById('modal-content-container').style.display = 'none';
@@ -383,35 +397,28 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('modal-content-container').style.display = 'block';
   });
 
-
   function closeModal() {
-    // Limpa o input
     const searchInput = document.getElementById('campo-pesquisa');
     if (searchInput) {
       searchInput.value = '';
     }
 
-    // Remove os parâmetros da URL
     const url = new URL(window.location.href);
     url.searchParams.delete('modal');
     url.searchParams.delete('search');
-    url.hash = ''; // remove hash, se existir
+    url.hash = '';
     history.replaceState(null, '', url.pathname + url.search);
 
-    // Fecha o modal
     modalNfs.classList.remove('show');
 
-    // Reenvia a pesquisa sem filtro
     const form = document.getElementById('form-pesquisa');
     if (form) {
       form.submit();
     } else {
-      // Se não tiver formulário, recarrega a página
       location.reload();
     }
   }
 
-  // Evento no botão X e na tecla Esc
   fecharModalBtn.addEventListener('click', closeModal);
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeModal();
@@ -421,7 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function setupNFList() {
     document.querySelectorAll('#modal-nfs tbody tr[data-id]').forEach(tr => {
       const nfId    = tr.dataset.id;
-      let obs       = tr.dataset.obs.trim();
+      let obs       = tr.dataset.obs ? tr.dataset.obs.trim() : '';
       const actions = tr.querySelector('.col-actions');
       actions.innerHTML = '';
 
@@ -448,7 +455,6 @@ document.addEventListener('DOMContentLoaded', () => {
           const btnSave = modal.querySelector('#btnSaveObs');
           const btnDel = modal.querySelector('#btnDeleteObs');
 
-          // Preenche e mostra em modo view
           text.textContent = obs;
           view.style.display = 'block';
           edit.style.display = 'none';
@@ -457,7 +463,6 @@ document.addEventListener('DOMContentLoaded', () => {
           btnDel.style.display = 'inline-block';
           modal.classList.add('show');
 
-          // EDITAR
           btnEdit.onclick = () => {
             input.value = obs;
             view.style.display = 'none';
@@ -466,7 +471,6 @@ document.addEventListener('DOMContentLoaded', () => {
             btnSave.style.display = 'inline-block';
           };
 
-          // SALVAR
           btnSave.onclick = async () => {
             const novaObs = input.value.trim();
             const resp = await fetch(`${window.location.pathname}/observacao/${nfId}`, {
@@ -476,17 +480,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (!resp.ok) return alert('Erro ao salvar observação.');
 
-            // atualiza dataset e localStorage
             tr.dataset.obs = novaObs;
             localStorage.removeItem(`nfRead_${nfId}`);
             obs = novaObs;
 
-            // fecha modal e re-renderiza
             modal.classList.remove('show');
             setupNFList();
           };
 
-          // EXCLUIR
           btnDel.onclick = async () => {
             if (!confirm('Deseja realmente excluir esta observação?')) return;
             const resp = await fetch(`${window.location.pathname}/observacao/${nfId}`, {
@@ -494,7 +495,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (!resp.ok) return alert('Erro ao excluir observação.');
 
-            // limpa no DB e na UI: remove obs e oculta ícone
             tr.dataset.obs = '';
             modal.classList.remove('show');
             setupNFList();
@@ -529,16 +529,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const btnSave = modal.querySelector('#btnSaveObs');
         const btnDel  = modal.querySelector('#btnDeleteObs');
 
-        // Modo edição direto:
         view.style.display     = 'none';
         edit.style.display     = 'block';
         btnEdit.style.display  = 'none';
         btnSave.style.display  = 'inline-block';
-        btnDel.style.display   = obs ? 'inline-block' : 'none'; // só mostra “Excluir” se já há obs
-        input.value            = obs;  // pode estar vazio
+        btnDel.style.display   = obs ? 'inline-block' : 'none';
+        input.value            = obs;
         modal.classList.add('show');
 
-        // Salvar nova observação (mesmo código do btnSave do sino)
         btnSave.onclick = async () => {
           const novaObs = input.value.trim();
           if (!novaObs) return alert('Observação não pode ficar vazia.');
@@ -556,7 +554,6 @@ document.addEventListener('DOMContentLoaded', () => {
           setupNFList();
         };
 
-        // Excluir se já existia antes
         btnDel.onclick = async () => {
           if (!confirm('Excluir observação?')) return;
           const resp = await fetch(`${window.location.pathname}/observacao/${nfId}`, {
@@ -571,20 +568,17 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       actionMenu.append(noteIcon);
 
-      // ➕ ícone de editar já existente
+      // edit & delete icons (stubs/you can fill server calls)
       const editIcon = document.createElement('span');
       editIcon.className   = 'icon edit-icon';
       editIcon.title       = 'Editar';
       editIcon.textContent = '✏️';
-      // ... seu código de editInline aqui ...
       actionMenu.append(editIcon);
 
-      // ➖ ícone de excluir
       const delIcon = document.createElement('span');
       delIcon.className   = 'icon delete-icon';
       delIcon.title       = 'Excluir';
       delIcon.textContent = '🗑️';
-      // ... seu código de delete aqui ...
       actionMenu.append(delIcon);
 
       menuCont.appendChild(actionMenu);
@@ -611,19 +605,15 @@ document.addEventListener('DOMContentLoaded', () => {
           base: tds[7].textContent.trim()
         };
 
-        // — Data —
-        const atData = tds[1].textContent.trim().split('/'); // ["dd","mm","yyyy"]
+        const atData = tds[1].textContent.trim().split('/');
         tds[1].innerHTML = `<input type="date" value="${atData[2]}-${atData[1].padStart(2,'0')}-${atData[0].padStart(2,'0')}">`;
 
-        // — NF —
         const atNf = tds[2].textContent.trim();
         tds[2].innerHTML = `<input type="text" value="${atNf}" style="width:60px">`;
 
-        // — Produto —
         const nomeAt  = tds[3].textContent.trim();
         tds[3].innerHTML = `<input type="text" value="${nomeAt}" style="width:100%">`;
 
-        // — Peso —
         const pesoAt = tds[4].textContent.trim().replace(' Kg','').replace(',', '.');
         tds[4].innerHTML = `<input type="number" step="0.001" value="${pesoAt}" style="width:80px">`;
         const pesoInput = tds[4].querySelector('input');
@@ -639,40 +629,32 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
 
-        // — Cliente —
         const cliAt = tds[5].textContent.trim();
         tds[5].innerHTML = `<input type="text" value="${cliAt}" style="width:120px">`;
 
-        // — CNPJ/CPF —
         const cnpjAt = tds[6].textContent.trim();
         tds[6].innerHTML = `<input type="text" value="${cnpjAt}" style="width:120px">`;
 
         const cnpjInput = tds[6].querySelector('input');
-
         cnpjInput.addEventListener('input', () => {
           let val = cnpjInput.value.replace(/\D/g, '');
-
           if (val.length <= 11) {
-            // CPF: 000.000.000-00
             val = val.replace(/(\d{3})(\d)/, '$1.$2');
             val = val.replace(/(\d{3})(\d)/, '$1.$2');
             val = val.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
           } else {
-            // CNPJ: 00.000.000/0000-00
             val = val.replace(/^(\d{2})(\d)/, '$1.$2');
             val = val.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
             val = val.replace(/\.(\d{3})(\d)/, '.$1/$2');
             val = val.replace(/(\d{4})(\d{1,2})$/, '$1-$2');
           }
-
           cnpjInput.value = val;
         });
 
-        // — Base —
         const baseAt = tds[7].textContent.trim();
-        const optsM = Array.from(baseList.children)
+        const optsM = baseList ? Array.from(baseList.children)
           .map(li => `<li data-value="${li.dataset.value}">${li.textContent}</li>`)
-          .join('');
+          .join('') : '';
         tds[7].innerHTML = `
           <div class="dropdown-container-inline">
             <div class="dropdown-input-inline" tabindex="0">
@@ -683,21 +665,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const ddM     = tds[7].querySelector('.dropdown-input-inline');
         const ddListM = tds[7].querySelector('.dropdown-list-inline');
         let selM      = baseAt;
-        ddM.addEventListener('click', () => ddListM.classList.toggle('show'));
-        ddListM.querySelectorAll('li').forEach(li => {
-          li.addEventListener('click', () => {
-            selM = li.dataset.value;
-            ddM.querySelector('.placeholder-inline').textContent = li.textContent;
-            ddListM.classList.remove('show');
+        if (ddM) {
+          ddM.addEventListener('click', () => ddListM.classList.toggle('show'));
+          ddListM.querySelectorAll('li').forEach(li => {
+            li.addEventListener('click', () => {
+              selM = li.dataset.value;
+              ddM.querySelector('.placeholder-inline').textContent = li.textContent;
+              ddListM.classList.remove('show');
+            });
           });
-        });
-        document.addEventListener('click', ev => {
-          if (!ddM.contains(ev.target) && !ddListM.contains(ev.target)) {
-            ddListM.classList.remove('show');
-          }
-        });
+          document.addEventListener('click', ev => {
+            if (!ddM.contains(ev.target) && !ddListM.contains(ev.target)) {
+              ddListM.classList.remove('show');
+            }
+          });
+        }
 
-        // — trocar ações por salvar —
         tds[8].innerHTML = '';
         const saveIcon = document.createElement('span');
         saveIcon.className   = 'icon save-icon';
@@ -705,7 +688,6 @@ document.addEventListener('DOMContentLoaded', () => {
         saveIcon.textContent = '💾';
         tds[8].appendChild(saveIcon);
 
-        // Botão CANCELAR
         const cancelIcon = document.createElement('span');
         cancelIcon.className = 'icon cancel-icon';
         cancelIcon.title     = 'Cancelar edição';
@@ -713,7 +695,6 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelIcon.style.marginLeft = '8px';
         tds[8].appendChild(cancelIcon);
 
-        // Cancelar (restaura visual original)
         cancelIcon.addEventListener('click', () => {
           tds[1].textContent = oldValues.data;
           tds[2].textContent = oldValues.nf;
@@ -722,12 +703,11 @@ document.addEventListener('DOMContentLoaded', () => {
           tds[5].innerHTML   = `<div class="multiline-ellipsis" title="${oldValues.cliente}">${oldValues.cliente}</div>`;
           tds[6].innerHTML   = `<div class="multiline-ellipsis" title="${oldValues.cnpj}">${oldValues.cnpj}</div>`;
           tds[7].innerHTML   = `<div class="multiline-ellipsis" title="${oldValues.base}">${oldValues.base}</div>`;
-          setupNFList(); // recarrega os ícones e eventos
+          setupNFList();
         });
 
         saveIcon.addEventListener('click', async () => {
-          // lê todos os novos valores
-          const newData    = tds[1].querySelector('input').value;  
+          const newData    = tds[1].querySelector('input').value;
           const newNf      = tds[2].querySelector('input').value.trim();
           const newNome    = tds[3].querySelector('input').value.trim();
           const newPeso    = tds[4].querySelector('input').value.trim();
@@ -740,7 +720,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
           }
 
-          // --- envia para o backend ---
           const form = new URLSearchParams({
             [`data_${nfId}`]: newData,
             [`numero_nf_${nfId}`]: newNf,
@@ -762,7 +741,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
           }
 
-          // --- só depois você atualiza a UI ---
           const [y,m,d] = newData.split('-');
           tds[1].textContent = `${d}/${m}/${y}`;
           tds[2].textContent = newNf;
@@ -787,7 +765,6 @@ document.addEventListener('DOMContentLoaded', () => {
             { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } }
           );
           if (!resp.ok) throw new Error('Erro ao excluir.');
-          // em vez de remover só a linha, recarrega tudo
           await refreshModalPage();
         } catch (err) {
           alert(err.message);
@@ -804,96 +781,15 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateDeleteBtnVisibility() {
     const anyChecked = Array.from(document.querySelectorAll('#modal-nfs tbody .select-row'))
       .some(checkbox => checkbox.checked);
-    deleteBtn.style.display = anyChecked ? 'inline-block' : 'none';
+    if (deleteBtn) deleteBtn.style.display = anyChecked ? 'inline-block' : 'none';
   }
-
-  // quando clicar no checkbox “selectAll”
-  selectAll.addEventListener('change', e => {
-    document.querySelectorAll('#modal-nfs tbody .select-row')
-      .forEach(cb => cb.checked = e.target.checked);
-    updateDeleteBtnVisibility();
-  });
-
-  // quando mudar qualquer checkbox de linha
-  document.querySelectorAll('#modal-nfs tbody').forEach(tbody => {
-    tbody.addEventListener('change', e => {
-      if (e.target.matches('.select-row')) {
-        updateDeleteBtnVisibility();
-      }
-    });
-  });
-
-  // ao clicar em “Excluir Selecionados”
-  deleteBtn.addEventListener('click', async () => {
-    const allChecked = selectAll.checked;
-    const term       = document.getElementById('searchNfInput').value.trim();
-    
-    let payload;
-    let confirmMsg;
-    
-    if (allChecked) {
-      confirmMsg = term
-        ? `Excluir TODAS as NFs que batem em “${term}”?`
-        : 'Excluir TODAS as NFs cadastradas?';
-      payload = { all: true, search: term };
-    } else {
-      // coleta só os IDs marcados
-      const checkedBoxes = Array.from(
-        document.querySelectorAll('#modal-nfs tbody .select-row:checked')
-      );
-      const ids = checkedBoxes.map(cb => cb.closest('tr').dataset.id);
-      if (!ids.length) return;
-      confirmMsg = `Excluir ${ids.length} NF(s) selecionada(s)?`;
-      payload = { ids };
-    }
-
-    if (!confirm(confirmMsg)) return;
-
-    try {
-      const resp = await fetch(`${window.location.pathname}/excluir-massa`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Requested-With': 'XMLHttpRequest'
-        },
-        body: JSON.stringify(payload)
-      });
-      if (!resp.ok) throw new Error('Falha na exclusão');
-
-      // 1) Recarrega todo o conteúdo do modal
-      await refreshModalPage();
-      
-      // 2) Reseta a seleção
-      selectAll.checked = false;
-      deleteBtn.style.display = 'none';
-
-      // 3) Se não houver linhas, mostra mensagem
-      const rows = modalTbody.querySelectorAll('tr[data-id]');
-      if (rows.length === 0) {
-        modalTbody.innerHTML = `
-          <tr>
-            <td colspan="9" style="text-align:center; color:#666;">
-              Nenhuma nota fiscal cadastrada
-            </td>
-          </tr>`;
-      }
-
-    } catch (err) {
-      alert(err.message);
-    }
-  });
 
   // === Funções de parsing/formatacao ===
   function parsePesoTextToNumber(text) {
     if (!text) return 0;
     let t = String(text).trim();
-    // remove "Kg" e quaisquer letras e espaços no final/início
-    t = t.replace(/[^\d,.\-]/g, ''); // mantém dígitos, vírgula, ponto e eventual sinal
-    // heurística: se houver vírgula, considera formato pt-BR (123,456)
-    // remover pontos que atuem como separador de milhares (heurística)
-    // primeiro remova pontos que estejam entre 1-3 dígitos seguidos por vírgula ou fim
+    t = t.replace(/[^\d,.\-]/g, '');
     t = t.replace(/\.(?=\d{3}([,\.]|$))/g, '');
-    // transforma vírgula decimal em ponto
     t = t.replace(',', '.');
     const n = parseFloat(t);
     return isNaN(n) ? 0 : n;
@@ -901,12 +797,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function formatPesoShort(n) {
     if (Math.abs(n - Math.round(n)) < 0.0005) {
-      return String(Math.round(n)); // inteiro sem decimais
+      return String(Math.round(n));
     }
     return n.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   }
 
-  // === Função principal: agrega por base_produto e mostra total geral ===
+  // === Função principal: agrega por base_produto e mostra total geral (somente linhas marcadas na página atual) ===
   function showAggregatedByBase() {
     const selectedBoxes = Array.from(document.querySelectorAll('#modal-nfs tbody .select-row:checked'));
     const totalsEl = document.getElementById('selectedTotals');
@@ -919,14 +815,12 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Agrupa por base (string exata da célula de Base Produto)
-    const map = {}; // { base: somaPeso }
+    const map = {};
     let totalGeral = 0;
 
     selectedBoxes.forEach(cb => {
       const tr = cb.closest('tr');
       if (!tr) return;
-      // conforme seu template: Base está na coluna índice 7
       const baseCell = tr.children[7];
       const pesoCell = tr.children[4];
       const base = baseCell ? baseCell.textContent.trim() : 'Sem Base';
@@ -937,20 +831,16 @@ document.addEventListener('DOMContentLoaded', () => {
       totalGeral += pesoNum;
     });
 
-    // Monta HTML: uma linha por base com peso agregado
     let html = '<div style="display:flex; flex-direction:column; gap:6px;">';
     for (const base of Object.keys(map)) {
       const soma = map[base];
-      // pula zeros (opcional)
       if (Math.abs(soma) < 1e-9) continue;
       html += `<div style="font-weight:700;">${base} ${formatPesoShort(soma)}</div>`;
     }
 
-    // Total geral
     html += `<div style="margin-top:6px; border-top:1px dashed #e6e6e6; padding-top:6px; font-weight:800;">
               Total ${formatPesoShort(totalGeral)}
             </div>`;
-
     html += '</div>';
 
     contentEl.innerHTML = html;
@@ -980,14 +870,95 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  // 1) selectAll
+  // estado global para seleção "todas as páginas"
+  let selectAllGlobal = false;
+
+  // função que renderiza totais vindos do servidor
+  function renderAggregatesFromServer(aggObj) {
+    const totalsEl = document.getElementById('selectedTotals');
+    const contentEl = document.getElementById('totalsContent');
+    if (!totalsEl || !contentEl) return;
+
+    if (!aggObj || !aggObj.totals || Object.keys(aggObj.totals).length === 0) {
+      totalsEl.style.display = 'none';
+      contentEl.innerHTML = '';
+      return;
+    }
+
+    let html = '<div style="display:flex; flex-direction:column; gap:6px;">';
+    for (const base of Object.keys(aggObj.totals)) {
+      const soma = aggObj.totals[base];
+      if (Math.abs(soma) < 1e-9) continue;
+      html += `<div style="font-weight:700;">${base} ${formatPesoShort(soma)}</div>`;
+    }
+    html += `<div style="margin-top:6px; border-top:1px dashed #e6e6e6; padding-top:6px; font-weight:800;">
+               Total ${formatPesoShort(aggObj.total || 0)}
+             </div>`;
+    html += '</div>';
+
+    contentEl.innerHTML = html;
+    totalsEl.style.display = 'block';
+  }
+
+  // 1) selectAll com comportamento "todas as páginas"
   const selectAllCheckbox = document.getElementById('selectAll');
   if (selectAllCheckbox) {
-    selectAllCheckbox.addEventListener('change', e => {
+    selectAllCheckbox.addEventListener('change', async (e) => {
+      const checked = e.target.checked;
+
+      // marca/desmarca os da página atual (visual)
       document.querySelectorAll('#modal-nfs tbody .select-row')
-        .forEach(cb => cb.checked = e.target.checked);
+        .forEach(cb => cb.checked = checked);
+
       updateDeleteBtnVisibility();
-      showAggregatedByBase();
+
+      const searchTerm = (document.getElementById('searchNfInput') || { value: '' }).value.trim();
+
+      if (checked) {
+        selectAllGlobal = true;
+        try {
+          const params = new URLSearchParams();
+          if (searchTerm) params.append('search', searchTerm);
+          params.append('all', '1');
+
+          // *** Atenção: use aqui o endpoint que seu backend realmente expõe.
+          // Se você deixou em português use '/saida_nf/agregacao_selecao'
+          // se manteve em inglês use '/saida_nf/aggregate_selection'
+          const endpoint = '/saida_nf/agregacao_selecao';
+
+          const resp = await fetch(`${endpoint}?${params.toString()}`, {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+
+          if (!resp.ok) {
+            // tenta ler texto de erro para depuração
+            const text = await resp.text().catch(() => '');
+            throw new Error(`Servidor respondeu com status ${resp.status}. ${text}`);
+          }
+
+          const json = await resp.json();
+          renderAggregatesFromServer(json);
+
+          // só altera o estilo se o elemento existir
+          const deleteBtnEl = document.getElementById('deleteSelectedBtn');
+          if (deleteBtnEl) deleteBtnEl.style.display = 'inline-block';
+
+        } catch (err) {
+          console.error('Erro ao buscar agregados globais:', err);
+          // aviso amigável ao usuário
+          alert('Erro ao obter totais agregados das demais páginas. A seleção será limitada à página atual.');
+          // fallback: desativa seleção global e limpa agregados vindos do servidor
+          selectAllGlobal = false;
+          renderAggregatesFromServer(null);
+          // mantém os checkboxes da página atual marcados (já feito acima)
+        }
+      } else {
+        // desmarcou o cabeçalho -> seleção global desligada
+        selectAllGlobal = false;
+        renderAggregatesFromServer(null);
+        showAggregatedByBase();
+      }
     });
   }
 
@@ -995,20 +966,28 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('#modal-nfs tbody').forEach(tbody => {
     tbody.addEventListener('change', e => {
       if (e.target.matches('.select-row')) {
+        if (selectAllGlobal) {
+          selectAllGlobal = false;
+          const selectAllCheckbox = document.getElementById('selectAll');
+          if (selectAllCheckbox) selectAllCheckbox.checked = false;
+          renderAggregatesFromServer(null);
+        }
         updateDeleteBtnVisibility();
         showAggregatedByBase();
       }
     });
   });
 
-  // 3) limpeza após recarregar modal — chame clearAggregatedTotalsDisplay() ao final de refreshModalPage()
-  // também fornecemos um listener para uso manual:
+  // 3) limpeza após recarregar modal — listener
   window.addEventListener('modalRefreshCleanup', clearAggregatedTotalsDisplay);
 
   // fechar modal de observação
-  document.getElementById('modalObsClose').addEventListener('click', () =>
-    document.getElementById('modal-obs').classList.remove('show')
-  );
+  const modalObsClose = document.getElementById('modalObsClose');
+  if (modalObsClose) {
+    modalObsClose.addEventListener('click', () =>
+      document.getElementById('modal-obs').classList.remove('show')
+    );
+  }
 
   setupNFList();
 
@@ -1020,31 +999,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const term = input.value.trim();
     const params = new URLSearchParams();
 
-    // sempre mantemos page=1 e modal=1
     params.set('page',  '1');
     params.set('modal', '1');
 
-    // só adiciona search se tiver termo
     if (term) {
       params.set('search', term);
     }
 
-    // adiciona o hash que seu código já usa pra abrir (#modal-nfs)
     window.location.href = `${base}?${params.toString()}#modal-nfs`;
   }
 
-  // dispara somente ao apertar Enter
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      doSearch();
-    }
-  });
+  if (input) {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        doSearch();
+      }
+    });
+  }
 
-  // opcional: botão de busca caso você tenha (ou queira criar) um <button id="searchNfBtn">
   const btn = document.getElementById('searchNfBtn');
   if (btn) btn.addEventListener('click', doSearch);
-
 
   // auto-hide flash messages
   setTimeout(() => {
@@ -1060,35 +1035,33 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnOpenFilter  = document.getElementById('btnOpenFilter');
   const btnCloseFilter = document.getElementById('fecharModalFiltros');
 
-  btnOpenFilter.addEventListener('click', () =>
+  if (btnOpenFilter) btnOpenFilter.addEventListener('click', () =>
     modalFiltros.classList.add('show')
   );
-  btnCloseFilter.addEventListener('click', () =>
+  if (btnCloseFilter) btnCloseFilter.addEventListener('click', () =>
     modalFiltros.classList.remove('show')
   );
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') modalFiltros.classList.remove('show');
-  })
+  });
 
   // --- EXPORTAÇÃO FILTRADA ---
   async function exportar(formData, tipo) {
-    // monta a query string
     const params = new URLSearchParams();
     for (const [k, v] of formData.entries()) {
       if (v.trim()) params.append(k, v);
     }
-    params.append('tipo', tipo); // 'excel' ou 'pdf'
-
-    // dispara o download
+    params.append('tipo', tipo);
     window.location = `/saida_nf/exportar_filtrado?${params.toString()}`;
   }
 
-  document.getElementById('btnExportExcel').addEventListener('click', () => {
+  const btnExportExcel = document.getElementById('btnExportExcel');
+  const btnExportPdf = document.getElementById('btnExportPdf');
+  if (btnExportExcel) btnExportExcel.addEventListener('click', () => {
     const fd = new FormData(document.getElementById('form-filtros'));
     exportar(fd, 'excel');
   });
-
-  document.getElementById('btnExportPdf').addEventListener('click', () => {
+  if (btnExportPdf) btnExportPdf.addEventListener('click', () => {
     const fd = new FormData(document.getElementById('form-filtros'));
     exportar(fd, 'pdf');
   });
@@ -1099,16 +1072,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const importClose    = document.getElementById('importClose');
   const cancelImport   = document.getElementById('cancelImport');
 
-  btnImportModal.addEventListener('click', () => {
-    importModal.classList.add('show');
+  if (btnImportModal) btnImportModal.addEventListener('click', () => {
+    if (importModal) importModal.classList.add('show');
   });
-
-  importClose.addEventListener('click', () => {
-    importModal.classList.remove('show');
+  if (importClose) importClose.addEventListener('click', () => {
+    if (importModal) importModal.classList.remove('show');
   });
-
-  cancelImport.addEventListener('click', () => {
-    importModal.classList.remove('show');
+  if (cancelImport) cancelImport.addEventListener('click', () => {
+    if (importModal) importModal.classList.remove('show');
   });
 
   const formImport = document.getElementById('form-import-excel');
@@ -1118,63 +1089,64 @@ document.addEventListener('DOMContentLoaded', () => {
   const importMessage = document.getElementById('importMessage');
   const importMsgText = document.getElementById('importMsgText');
 
-  formImport.addEventListener('submit', e => {
-    e.preventDefault();
+  if (formImport) {
+    formImport.addEventListener('submit', e => {
+      e.preventDefault();
 
-    // limpa mensagens antigas
-    importMessage.style.display = 'none';
-    importMsgText.textContent = '';
-
-    const formData = new FormData(formImport);
-    const xhr = new XMLHttpRequest();
-
-    xhr.open('POST', formImport.action, true);
-
-    // mostra barra
-    progressContainer.style.display = 'block';
-    progressBar.style.width = '0%';
-    progressText.textContent = '0%';
-
-    xhr.upload.addEventListener('progress', e => {
-      if (e.lengthComputable) {
-        const percent = Math.round((e.loaded / e.total) * 100);
-        progressBar.style.width = percent + '%';
-        progressText.textContent = percent + '%';
+      if (importMessage) {
+        importMessage.style.display = 'none';
       }
-    });
+      if (importMsgText) importMsgText.textContent = '';
 
-    xhr.onload = async () => {
-      if (xhr.status === 200) {
-        showImportMessage('Importação concluída com sucesso.', true);
-        resetProgressBar();
+      const formData = new FormData(formImport);
+      const xhr = new XMLHttpRequest();
 
-        // Atualiza o modal sem fechar
-        try {
-          await refreshModalPage();
-        } catch (err) {
-          console.error('Erro ao atualizar modal após importação:', err);
+      xhr.open('POST', formImport.action, true);
+
+      if (progressContainer && progressBar && progressText) {
+        progressContainer.style.display = 'block';
+        progressBar.style.width = '0%';
+        progressText.textContent = '0%';
+      }
+
+      xhr.upload.addEventListener('progress', e => {
+        if (e.lengthComputable && progressBar && progressText) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          progressBar.style.width = percent + '%';
+          progressText.textContent = percent + '%';
         }
+      });
 
-      } else {
-        showImportMessage(
-          'Erro ao importar arquivo: ' +
-          (xhr.responseText || xhr.statusText),
-          false
-        );
+      xhr.onload = async () => {
+        if (xhr.status === 200) {
+          showImportMessage('Importação concluída com sucesso.', true);
+          resetProgressBar();
+
+          if (importModal) importModal.classList.remove('show');
+
+          // força recarregar a página inteira — preserva querystring atual
+          window.location.href = window.location.pathname + window.location.search;
+        } else {
+          showImportMessage(
+            'Erro ao importar arquivo: ' + (xhr.responseText || xhr.statusText),
+            false
+          );
+          resetProgressBar();
+        }
+      };
+
+      xhr.onerror = () => {
+        showImportMessage('Falha na conexão ao enviar arquivo.', false);
         resetProgressBar();
-      }
-    };
+      };
 
-    xhr.onerror = () => {
-      showImportMessage('Falha na conexão ao enviar arquivo.', false);
-      resetProgressBar();
-    };
-
-    xhr.send(formData);
-  });
+      xhr.send(formData);
+    });
+  }
 
   // função para mostrar mensagem
   function showImportMessage(msg, success) {
+    if (!importMessage || !importMsgText) return;
     importMessage.style.display = 'block';
     importMsgText.textContent = msg;
     importMsgText.style.color = success ? 'green' : 'red';
@@ -1182,26 +1154,83 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // função para resetar barra
   function resetProgressBar() {
+    if (!progressBar || !progressText) return;
     progressBar.style.width = '0%';
     progressText.textContent = '0%';
-    // opcional: esconder barra após 1s
     setTimeout(() => {
-      progressContainer.style.display = 'none';
+      if (progressContainer) progressContainer.style.display = 'none';
     }, 1000);
   }
 
   // fecha clicando fora
   window.addEventListener('click', e => {
     if (e.target === importModal) {
-      importModal.classList.remove('show');
+      if (importModal) importModal.classList.remove('show');
     }
   });
 
   window.addEventListener('load', () => {
-  // Se a URL terminar com #modal-nfs, abra o modal automaticamente
     if (window.location.hash === '#modal-nfs') {
       const modalFiltros = document.getElementById('modal-nfs');
       if (modalFiltros) modalFiltros.classList.add('show');
     }
   });
+
+  // --- Exclusão em massa: usa selectAllGlobal ao invés de somente selectAll.checked ---
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      const allChecked = selectAllGlobal || (selectAll && selectAll.checked);
+      const term       = (document.getElementById('searchNfInput') || { value: '' }).value.trim();
+
+      let payload;
+      let confirmMsg;
+
+      if (allChecked) {
+        confirmMsg = term
+          ? `Excluir TODAS as NFs que batem em “${term}”?`
+          : 'Excluir TODAS as NFs cadastradas?';
+        payload = { all: true, search: term };
+      } else {
+        const checkedBoxes = Array.from(
+          document.querySelectorAll('#modal-nfs tbody .select-row:checked')
+        );
+        const ids = checkedBoxes.map(cb => cb.closest('tr').dataset.id);
+        if (!ids.length) return;
+        confirmMsg = `Excluir ${ids.length} NF(s) selecionada(s)?`;
+        payload = { ids };
+      }
+
+      if (!confirm(confirmMsg)) return;
+
+      try {
+        const resp = await fetch(`${window.location.pathname}/excluir-massa`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          body: JSON.stringify(payload)
+        });
+        if (!resp.ok) throw new Error('Falha na exclusão');
+
+        await refreshModalPage();
+
+        if (selectAll) selectAll.checked = false;
+        if (deleteBtn) deleteBtn.style.display = 'none';
+
+        const rows = modalTbody.querySelectorAll('tr[data-id]');
+        if (rows.length === 0) {
+          modalTbody.innerHTML = `
+            <tr>
+              <td colspan="9" style="text-align:center; color:#666;">
+                Nenhuma nota fiscal cadastrada
+              </td>
+            </tr>`;
+        }
+
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  }
 });

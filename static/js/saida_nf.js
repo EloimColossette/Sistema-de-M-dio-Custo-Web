@@ -1,4 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
+  'use strict';
+
   // --- FUNÇÃO: Capitalizar Nome ---
   function capitalizeWords(str) {
     const lowerWords = ['de', 'da', 'do', 'das', 'dos', 'e'];
@@ -19,11 +21,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const addBtn       = document.getElementById('addProdBtn');
   const form         = document.getElementById('form-nova-nf');
   let produtos       = [];
-
-  // Dropdown de Base (form principal)
   const baseInput = document.getElementById('prodBaseInput');
   const baseList  = document.getElementById('prodBaseList');
   let selectedBase = '';
+  let suppressRowHandler = false;
 
   if (baseInput && baseList) {
     baseInput.addEventListener('click', () => baseList.classList.toggle('show'));
@@ -316,6 +317,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <td class="col-actions"></td>
       `;
       modalTbody.appendChild(trNew);
+      // anexa handler de seleção
+      attachRowSelectionHandler(trNew);
     });
 
     console.log(`Carregados ${Math.min(count, json.rows.length)} linhas da página ${currentPage}.`);
@@ -359,17 +362,19 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
 
       modalTbody.appendChild(tr);
+      // garante que cada linha adicionada tenha o handler de seleção
+      attachRowSelectionHandler(tr);
     });
 
     // 5) reaplica todos os event listeners
     setupNFList();
 
-    // garante limpeza visual ao recarregar
-    window.dispatchEvent(new Event('modalRefreshCleanup'));
-    const selectAllEl = document.getElementById('selectAll');
-    if (selectAllEl) selectAllEl.checked = false;
-    const deleteBtn = document.getElementById('deleteSelectedBtn');
-    if (deleteBtn) deleteBtn.style.display = 'none';
+    // NOTA: não limpamos mais o checkbox do cabeçalho nem escondemos o botão aqui,
+    // porque queremos que o estado persistido (localStorage) controle a visibilidade
+    // ao navegar entre páginas. A restauração é feita abaixo.
+
+    // restaura seleção persistida (se houver)
+    restoreSelections();
   }
 
   // --- MODAL DE NFS CADASTRADAS ---
@@ -397,24 +402,53 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('modal-content-container').style.display = 'block';
   });
 
+  function clearSelectionsOnClose() {
+    // limpa persistência
+    try { localStorage.removeItem(SELECT_KEY); } catch(e){}
+    try { localStorage.removeItem(SELECT_ALL_KEY); } catch(e){}
+
+    // limpa flag em memória
+    selectAllGlobal = false;
+
+    // desmarca checkboxes visíveis
+    document.querySelectorAll('#modal-nfs tbody .select-row')
+      .forEach(cb => cb.checked = false);
+
+    // desmarca checkbox do cabeçalho (se existir)
+    const headerCb = document.getElementById('selectAll');
+    if (headerCb) headerCb.checked = false;
+
+    // esconde botão excluir e limpa agregados/totais
+    if (deleteBtn) deleteBtn.style.display = 'none';
+    clearAggregatedTotalsDisplay();
+  }
+
   function closeModal() {
+    // limpa campo de busca
     const searchInput = document.getElementById('campo-pesquisa');
     if (searchInput) {
       searchInput.value = '';
     }
 
+    // limpa seleção sempre que o modal for fechado
+    clearSelectionsOnClose();
+
+    // limpa hash/query string relacionada ao modal
     const url = new URL(window.location.href);
     url.searchParams.delete('modal');
     url.searchParams.delete('search');
     url.hash = '';
     history.replaceState(null, '', url.pathname + url.search);
 
+    // fecha o modal (classe visual)
     modalNfs.classList.remove('show');
 
+    // mantém comportamento anterior: envia o form de pesquisa ou recarrega a página
     const form = document.getElementById('form-pesquisa');
     if (form) {
       form.submit();
     } else {
+      // recarrega a página para pegar estado atualizado do servidor
       location.reload();
     }
   }
@@ -772,6 +806,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     });
+
+    // Após montar o loop, garante que restoreSelections será chamado por quem chamou setupNFList()
   }
 
   // --- Exclusão em massa no modal ---
@@ -779,9 +815,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const selectAll = document.getElementById('selectAll');
 
   function updateDeleteBtnVisibility() {
+    // agora considera seleção global ou ids persistidos
     const anyChecked = Array.from(document.querySelectorAll('#modal-nfs tbody .select-row'))
       .some(checkbox => checkbox.checked);
-    if (deleteBtn) deleteBtn.style.display = anyChecked ? 'inline-block' : 'none';
+
+    const persistedIds = (function(){ try { return JSON.parse(localStorage.getItem('modalSelectedNFIds')||'[]'); } catch (e) { return []; } })();
+    const hasPersisted = persistedIds && persistedIds.length > 0;
+    const selectAllFlag = localStorage.getItem('modalSelectAllGlobal') === '1';
+
+    const shouldShow = anyChecked || hasPersisted || selectAllFlag;
+
+    if (deleteBtn) deleteBtn.style.display = shouldShow ? 'inline-block' : 'none';
   }
 
   // === Funções de parsing/formatacao ===
@@ -847,6 +891,55 @@ document.addEventListener('DOMContentLoaded', () => {
     totalsEl.style.display = 'block';
   }
 
+  // --- FUNÇÃO: atualiza agregados com base na seleção persistida (chama servidor) ---
+  async function updateAggregatesForSelection() {
+    const selectedIds = loadSelectedIds();
+    const selectAllStored = loadSelectAllFlag();
+
+    // se a seleção for "todas as páginas", pedir agregados globais
+    if (selectAllStored) {
+      try {
+        const params = new URLSearchParams();
+        params.append('all', '1');
+        const resp = await fetch(`/saida_nf/agregacao_selecao?${params.toString()}`, {
+          headers: {'X-Requested-With': 'XMLHttpRequest'}
+        });
+        if (!resp.ok) throw new Error('Erro ao obter agregados do servidor');
+        const json = await resp.json();
+        renderAggregatesFromServer(json);
+        return;
+      } catch (err) {
+        console.error(err);
+        renderAggregatesFromServer(null);
+        return;
+      }
+    }
+
+    // se houver ids persistidos, solicitar agregados apenas para eles
+    if (selectedIds && selectedIds.length > 0) {
+      try {
+        const qs = new URLSearchParams();
+        qs.append('ids', selectedIds.join(','));
+        const resp = await fetch(`/saida_nf/agregacao_selecao?${qs.toString()}`, {
+          headers: {'X-Requested-With': 'XMLHttpRequest'}
+        });
+        if (!resp.ok) throw new Error('Erro ao obter agregados do servidor');
+        const json = await resp.json();
+        renderAggregatesFromServer(json);
+        return;
+      } catch (err) {
+        console.error(err);
+        showAggregatedByBase();
+        return;
+      }
+    }
+
+    // sem persistência: calcula apenas pela página atual (comportamento antigo)
+    showAggregatedByBase();
+  }
+
+
+
   // Limpa exibição (usar ao recarregar modal)
   function clearAggregatedTotalsDisplay() {
     const totalsEl = document.getElementById('selectedTotals');
@@ -858,7 +951,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* -------------------------
-    Integração com seleções
+    Integração com seleções e persistência (localStorage)
     ------------------------- */
   // fallback updateDeleteBtnVisibility se não existir
   if (typeof updateDeleteBtnVisibility !== 'function') {
@@ -872,6 +965,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // estado global para seleção "todas as páginas"
   let selectAllGlobal = false;
+
+  // LOCALSTORAGE KEYS
+  const SELECT_KEY = 'modalSelectedNFIds';
+  const SELECT_ALL_KEY = 'modalSelectAllGlobal';
+
+  // carregar/salvar array de ids
+  function loadSelectedIds() {
+    try {
+      const raw = localStorage.getItem(SELECT_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+  function saveSelectedIds(arr) {
+    localStorage.setItem(SELECT_KEY, JSON.stringify(Array.from(new Set(arr))));
+  }
+
+  // helpers
+  function hasSelectedId(id) {
+    const arr = loadSelectedIds();
+    return arr.indexOf(String(id)) !== -1;
+  }
+  function addSelectedId(id) {
+    const arr = loadSelectedIds().map(String);
+    if (!arr.includes(String(id))) {
+      arr.push(String(id));
+      saveSelectedIds(arr);
+    }
+  }
+  function removeSelectedId(id) {
+    let arr = loadSelectedIds().map(String);
+    arr = arr.filter(x => x !== String(id));
+    saveSelectedIds(arr);
+  }
+
+  // salvar / ler flag selectAllGlobal
+  function saveSelectAllFlag(val) {
+    if (val) localStorage.setItem(SELECT_ALL_KEY, '1');
+    else localStorage.removeItem(SELECT_ALL_KEY);
+  }
+  function loadSelectAllFlag() {
+    return localStorage.getItem(SELECT_ALL_KEY) === '1';
+  }
 
   // função que renderiza totais vindos do servidor
   function renderAggregatesFromServer(aggObj) {
@@ -900,69 +1035,113 @@ document.addEventListener('DOMContentLoaded', () => {
     totalsEl.style.display = 'block';
   }
 
-  // 1) selectAll com comportamento "todas as páginas"
-  const selectAllCheckbox = document.getElementById('selectAll');
-  if (selectAllCheckbox) {
-    selectAllCheckbox.addEventListener('change', async (e) => {
-      const checked = e.target.checked;
+  // attachRowSelectionHandler: liga listener a uma linha e mantém localStorage atualizado
+  function attachRowSelectionHandler(tr) {
+    const id = String(tr.dataset.id);
+    const cb = tr.querySelector('.select-row');
+    if (!cb) return;
 
-      // marca/desmarca os da página atual (visual)
-      document.querySelectorAll('#modal-nfs tbody .select-row')
-        .forEach(cb => cb.checked = checked);
+    // inicialmente marca conforme estado salvo (útil se setupNFList criar checkboxes)
+    if (hasSelectedId(id) || loadSelectAllFlag()) {
+      cb.checked = true;
+    }
+
+    // remove listener antigo, se houver
+    if (cb._persistHandler) cb.removeEventListener('change', cb._persistHandler);
+
+    const handler = (e) => {
+      // Se estamos suprimindo handlers (mudança programática), não persistir alterações
+      if (suppressRowHandler) return;
+
+      const checked = e.target.checked;
+      if (checked) {
+        addSelectedId(id);
+      } else {
+        removeSelectedId(id);
+      }
+
+      // se usuário marcou/desmarcou individualmente, descartamos selectAllGlobal
+      if (loadSelectAllFlag() && !checked) {
+        saveSelectAllFlag(false);
+        selectAllGlobal = false;
+        const headerCb = document.getElementById('selectAll');
+        if (headerCb) headerCb.checked = false;
+      }
 
       updateDeleteBtnVisibility();
 
-      const searchTerm = (document.getElementById('searchNfInput') || { value: '' }).value.trim();
+      // Atualiza SOMENTE pelo que está visível/selecionado na página atual.
+      showAggregatedByBase();
+    };
+
+    cb.addEventListener('change', handler);
+    cb._persistHandler = handler;
+  }
+
+  // restaura seleção salva (marca checkboxes de acordo)
+  function restoreSelections() {
+    const selectedIds = loadSelectedIds().map(String);
+    const selectAllStored = loadSelectAllFlag();
+    document.querySelectorAll('#modal-nfs tbody tr[data-id]').forEach(tr => {
+      const id = String(tr.dataset.id);
+      const cb = tr.querySelector('.select-row');
+      if (!cb) return;
+      cb.checked = selectAllStored || selectedIds.includes(id) || cb.checked;
+    });
+
+    // se existe selectAll armazenado, atualiza checkbox do cabeçalho
+    const headerCb = document.getElementById('selectAll');
+    if (headerCb) headerCb.checked = selectAllStored;
+
+    // atualiza visibilidade do botão e totais
+    updateDeleteBtnVisibility();
+    showAggregatedByBase();
+  }
+
+  // 1) selectAll com comportamento "todas as páginas"
+  const selectAllCheckbox = document.getElementById('selectAll');
+  if (selectAllCheckbox) {
+    // restaura valor salvo quando inicializar (útil ao abrir modal)
+    if (loadSelectAllFlag()) {
+      selectAllCheckbox.checked = true;
+      selectAllGlobal = true;
+    }
+
+    selectAllCheckbox.addEventListener('change', async (e) => {
+      const checked = e.target.checked;
 
       if (checked) {
+        // ativa seleção global
+        saveSelectedIds([]);           // limpa ids individuais
+        saveSelectAllFlag(true);       // grava flag global
         selectAllGlobal = true;
-        try {
-          const params = new URLSearchParams();
-          if (searchTerm) params.append('search', searchTerm);
-          params.append('all', '1');
 
-          // *** Atenção: use aqui o endpoint que seu backend realmente expõe.
-          // Se você deixou em português use '/saida_nf/agregacao_selecao'
-          // se manteve em inglês use '/saida_nf/aggregate_selection'
-          const endpoint = '/saida_nf/agregacao_selecao';
+        // marca visualmente todos os checkboxes sem disparar persistência
+        suppressRowHandler = true;
+        document.querySelectorAll('#modal-nfs tbody .select-row').forEach(cb => cb.checked = true);
+        suppressRowHandler = false;
 
-          const resp = await fetch(`${endpoint}?${params.toString()}`, {
-            method: 'GET',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-          });
-
-          if (!resp.ok) {
-            // tenta ler texto de erro para depuração
-            const text = await resp.text().catch(() => '');
-            throw new Error(`Servidor respondeu com status ${resp.status}. ${text}`);
-          }
-
-          const json = await resp.json();
-          renderAggregatesFromServer(json);
-
-          // só altera o estilo se o elemento existir
-          const deleteBtnEl = document.getElementById('deleteSelectedBtn');
-          if (deleteBtnEl) deleteBtnEl.style.display = 'inline-block';
-
-        } catch (err) {
-          console.error('Erro ao buscar agregados globais:', err);
-          // aviso amigável ao usuário
-          alert('Erro ao obter totais agregados das demais páginas. A seleção será limitada à página atual.');
-          // fallback: desativa seleção global e limpa agregados vindos do servidor
-          selectAllGlobal = false;
-          renderAggregatesFromServer(null);
-          // mantém os checkboxes da página atual marcados (já feito acima)
-        }
+        // atualiza UI e agregados (server)
+        updateDeleteBtnVisibility();
+        await updateAggregatesForSelection();
       } else {
-        // desmarcou o cabeçalho -> seleção global desligada
+        // limpa TODAS as seleções
+        saveSelectedIds([]);
+        saveSelectAllFlag(false);
         selectAllGlobal = false;
-        renderAggregatesFromServer(null);
-        showAggregatedByBase();
+
+        suppressRowHandler = true;
+        document.querySelectorAll('#modal-nfs tbody .select-row').forEach(cb => cb.checked = false);
+        suppressRowHandler = false;
+
+        // garante header desmarcado (já vem do evento) e atualiza UI
+        updateDeleteBtnVisibility();
+        clearAggregatedTotalsDisplay();
       }
     });
   }
 
-  // 2) mudança em qualquer checkbox de linha
+  // 2) mudança em qualquer checkbox de linha - delegação para tbody (mantemos, mas também usamos attachRowSelectionHandler para cada tr)
   document.querySelectorAll('#modal-nfs tbody').forEach(tbody => {
     tbody.addEventListener('change', e => {
       if (e.target.matches('.select-row')) {
@@ -990,6 +1169,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   setupNFList();
+
+  // Após setup, anexa handlers às linhas já existentes e restaura seleção
+  document.querySelectorAll('#modal-nfs tbody tr[data-id]').forEach(tr => attachRowSelectionHandler(tr));
+  restoreSelections();
 
   // --- FILTRO de busca no modal ---
   const input = document.getElementById('searchNfInput');
@@ -1178,29 +1361,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Exclusão em massa: usa selectAllGlobal ao invés de somente selectAll.checked ---
   if (deleteBtn) {
-    deleteBtn.addEventListener('click', async () => {
+    
+deleteBtn.addEventListener('click', async () => {
       const allChecked = selectAllGlobal || (selectAll && selectAll.checked);
       const term       = (document.getElementById('searchNfInput') || { value: '' }).value.trim();
 
       let payload;
-      let confirmMsg;
 
       if (allChecked) {
-        confirmMsg = term
+        const confirmMsg = term
           ? `Excluir TODAS as NFs que batem em “${term}”?`
           : 'Excluir TODAS as NFs cadastradas?';
+        if (!confirm(confirmMsg)) return;
         payload = { all: true, search: term };
       } else {
-        const checkedBoxes = Array.from(
-          document.querySelectorAll('#modal-nfs tbody .select-row:checked')
-        );
-        const ids = checkedBoxes.map(cb => cb.closest('tr').dataset.id);
+        const persisted = loadSelectedIds();
+        let ids = [];
+        if (persisted && persisted.length > 0) {
+          ids = persisted;
+        } else {
+          const checkedBoxes = Array.from(
+            document.querySelectorAll('#modal-nfs tbody .select-row:checked')
+          );
+          ids = checkedBoxes.map(cb => cb.closest('tr').dataset.id);
+        }
         if (!ids.length) return;
-        confirmMsg = `Excluir ${ids.length} NF(s) selecionada(s)?`;
+        if (!confirm(`Excluir ${ids.length} NF(s) selecionada(s) (de todas as páginas)?`)) return;
         payload = { ids };
       }
-
-      if (!confirm(confirmMsg)) return;
 
       try {
         const resp = await fetch(`${window.location.pathname}/excluir-massa`, {
@@ -1217,6 +1405,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (selectAll) selectAll.checked = false;
         if (deleteBtn) deleteBtn.style.display = 'none';
+
+        // limpa seleção persistida - importante para não manter ids que já foram deletados
+        localStorage.removeItem(SELECT_KEY);
+        localStorage.removeItem(SELECT_ALL_KEY);
+        selectAllGlobal = false;
 
         const rows = modalTbody.querySelectorAll('tr[data-id]');
         if (rows.length === 0) {

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cálculo de NFs</title>
+  <link rel="icon" href="{{ url_for('static', filename='logos/Kametal.ico') }}" type="image/x-icon" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/calculo_nfs.css') }}">
+</head>
+<body>
+  <div id="calc-nfs-page" class="page-shell">
+
+    <section class="card card-add">
+      <div class="card-header">
+        <h2>Cálculo de NFs</h2>
+        <a class="btn-back-dashboard" href="{{ url_for('dashboard.dashboard') }}">← Dashboard</a>
+      </div>
+
+      <div class="card-body">
+
+        <!-- BARRA DE PESQUISA (dentro do card-add, acima do form) -->
+        <div class="page-controls">
+          <div class="search-container">
+            <input id="search_nf" type="text" placeholder="🔍 Pesquisar por produto ou id..." />
+          </div>
+
+          <!-- mantive o form de exclusão múltipla caso queira reativar depois -->
+          <form id="form-delete-multiple" action="{{ url_for('calculo_nfs.excluir_selecionados_calculo') }}" method="post">
+            <button id="btn-delete-selected" class="btn-delete-selected hidden" type="submit">🗑️ Excluir Selecionados</button>
+          </form>
+        </div>
+
+        <!-- Formulário de adição -->
+        <form id="form-nova-entrada" action="{{ url_for('calculo_nfs.criar_registro_calculo') }}" method="post">
+          <div class="form-row horizontal">
+            <div class="form-group">
+              <label for="novo_produto">Produto</label>
+              <select id="novo_produto" name="id_produto" required>
+                <option value="">-- selecione --</option>
+                {% for p in produtos %}
+                  <option value="{{ p.id }}">{{ p.nome }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="novo_qtd">Quantidade (estoque)</label>
+              <input id="novo_qtd" name="quantidade_estoque" type="text" placeholder="0,000">
+            </div>
+          </div>
+          <div class="form-row form-row-submit">
+            <button class="btn-primary" type="submit">Adicionar</button>
+          </div>
+        </form>
+
+      </div>
+    </section>
+
+    <!-- CARD DA TABELA -->
+    <section class="card card-list">
+      <div class="card-header">
+        <h2>Calculos/Estoque de NFs</h2>
+      </div>
+
+      <div class="card-body">
+                <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>NF</th>
+                <th>Produto</th>
+                <th>Peso Líquido</th>
+                <th>Quantidade Estoque</th>
+                <th>qtd_cobre</th>
+                <th>qtd_zinco</th>
+                <th>valor_total_nf</th>
+                <th>mao_de_obra</th>
+                <th>materia_prima</th>
+                <th>custo_total_manual</th>
+                <th>custo_total</th>
+                <th class="col-actions">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for e in estoques %}
+              <tr data-id="{{ e.id or '' }}">
+                <!-- Data da entrada_nf (formatada) -->
+                <td>{{ e.data or '' }}</td>
+
+                <!-- NF (vinda de entrada_nf) -->
+                <td>{{ e.nf or '' }}</td>
+
+                <!-- Produto: texto simples (removi o select inline) -->
+                <td class="td-produto">{{ e.produto or '' }}</td>
+
+                <!-- Peso líquido (vindo de entrada_nf) -->
+                <td><input class="input-inline" data-field="peso_liquido" value="{{ ('%.3f'|format(e.peso_liquido or 0)).replace('.', ',') }}" disabled></td>
+
+                <td><input class="input-inline" data-field="quantidade_estoque" value="{{ ('%.3f'|format(e.quantidade_estoque or 0)).replace('.', ',') }}" disabled></td>
+                <td><input class="input-inline" data-field="qtd_cobre" value="{{ ('%.3f'|format(e.qtd_cobre or 0)).replace('.', ',') }}" disabled></td>
+                <td><input class="input-inline" data-field="qtd_zinco" value="{{ ('%.2f'|format(e.qtd_zinco or 0)).replace('.', ',') }}" disabled></td>
+                <td><input class="input-inline" data-field="valor_total_nf" value="{{ ('%.2f'|format(e.valor_total_nf or 0)).replace('.', ',') }}" disabled></td>
+                <td><input class="input-inline" data-field="mao_de_obra" value="{{ ('%.2f'|format(e.mao_de_obra or 0)).replace('.', ',') }}" disabled></td>
+                <td><input class="input-inline" data-field="materia_prima" value="{{ ('%.2f'|format(e.materia_prima or 0)).replace('.', ',') }}" disabled></td>
+                <td><input class="input-inline" data-field="custo_total_manual" value="{{ ('%.2f'|format(e.custo_total_manual or 0)).replace('.', ',') }}" disabled></td>
+                <td><input class="input-inline" data-field="custo_total" value="{{ ('%.2f'|format(e.custo_total or 0)).replace('.', ',') }}" disabled></td>
+
+                <td class="col-actions">
+                  <button class="icon edit-icon" title="Editar">✏️</button>
+                  <button class="icon save-icon hidden" title="Salvar">💾</button>
+                  {% if e.id %}
+                    <form class="inline-delete" action="{{ url_for('calculo_nfs.excluir_registro_calculo', registro_id=e.id) }}" method="post">
+                      <button class="icon delete-icon" data-nome="{{ e.id }}" title="Excluir">🗑️</button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+              {% else %}
+              <tr><td colspan="13" class="no-data">Nenhum registro no estoque.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script src="{{ url_for('static', filename='js/calculo_nfs.js') }}"></script>
+</body>
+</html>

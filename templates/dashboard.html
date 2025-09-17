@@ -60,7 +60,8 @@
       </div>
       <ul class="submenu hidden" id="calculosSubmenu">
         <li>
-          <a href="#" class="{% if request.endpoint=='calculos.calculos_nfs' %}active{% endif %}">
+          <a href="{{ url_for('calculo_nfs.listar_calculo_nfs') }}"
+            class="{% if request.endpoint == 'calculo_nfs.listar_calculo_nfs' %}active{% endif %}">
             <span class="sub-icon">📊</span>
             <span class="sub-label">Cálculos de NFs</span>
           </a>

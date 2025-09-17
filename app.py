@@ -6,7 +6,7 @@ from routes.fornecedores_routes import fornecedores_bp
 from routes.materiais_routes import materiais_bp
 from routes.produtos_routes import produtos_bp
 from routes.saida_nf_routes import saida_nf_bp
-from routes.entrada_nf import entrada_nf_bp
+from routes.entrada_nf_route import entrada_nf_bp
 
 app = Flask(__name__)
 app.secret_key = 'segredo'  # Necessário para flash e sessão

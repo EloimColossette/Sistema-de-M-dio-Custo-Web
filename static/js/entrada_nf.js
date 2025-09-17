@@ -6,8 +6,26 @@ document.addEventListener('DOMContentLoaded', () => {
   window.currentEntradaPage = window.currentEntradaPage || 1;
   window.materiaisOptions = window.materiaisOptions || [];
   window.ENTRADAS_PER_PAGE = window.ENTRADAS_PER_PAGE || 10;
+  const SELECT_KEY = 'modalSelectedEntradaIds';
+  const SELECT_ALL_KEY = 'modalSelectAllEntrada';
 
   console.log('Materiais disponíveis:', window.materiaisOptions);
+
+  function saveSelectedIds() {
+    try { localStorage.setItem(SELECT_KEY, JSON.stringify(Array.from(selectedIds))); } catch (e) { /* ignore */ }
+  }
+  function loadSelectedIds() {
+    try { const v = JSON.parse(localStorage.getItem(SELECT_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+  }
+  function clearPersistedSelection() {
+    try { localStorage.removeItem(SELECT_KEY); localStorage.removeItem(SELECT_ALL_KEY); } catch(e) {}
+  }
+  function setSelectAllFlag(active) {
+    try { if (active) localStorage.setItem(SELECT_ALL_KEY, '1'); else localStorage.removeItem(SELECT_ALL_KEY); } catch(e) {}
+  }
+  function isSelectAllFlag() {
+    try { return localStorage.getItem(SELECT_ALL_KEY) === '1'; } catch(e) { return false; }
+  }
 
   // --- Persistência de colunas ocultas ---
   const STORAGE_KEY = 'entrada_nf_colunas_ocultas';
@@ -860,14 +878,39 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     btn.addEventListener('click', async () => {
-      const ids = Array.from(selectedIds);
-      if (ids.length === 0 && !window._entradaSelectedAllPages) return;
-      const curSearch = (modalContent.querySelector('#searchEntradaInput') || {}).value || '';
-      if (window._entradaSelectedAllPages) {
-        try { await deleteAllMatching(curSearch, {}); } catch (e) { console.error('Erro ao excluir todas por filtro:', e); }
-        return;
+      // prioriza ids persistidos em localStorage
+      const persisted = loadSelectedIds();
+      const hasPersisted = persisted && persisted.length > 0;
+      const selectAllGlobal = isSelectAllFlag() || window._entradaSelectedAllPages;
+      const curSearch = (modalContent && modalContent.querySelector('#searchEntradaInput') || {}).value || '';
+
+      try {
+        if (selectAllGlobal) {
+          // confirma exclusão por filtro (mantém uso do deleteAllMatching já existente)
+          const confirmMsg = curSearch ? `Excluir TODAS as entradas que batem em "${curSearch}"?` : 'Excluir TODAS as entradas?';
+          if (!confirm(confirmMsg)) return;
+          await deleteAllMatching(curSearch, {});
+          clearPersistedSelection();
+          return;
+        }
+
+        // senão usa ids persistidos (se existirem) ou os currently selected
+        let ids = [];
+        if (hasPersisted) ids = persisted;
+        else ids = Array.from(selectedIds);
+
+        if (!ids.length) return;
+        if (!confirm(`Excluir ${ids.length} entrada(s) selecionada(s)?`)) return;
+        await confirmAndDeleteBulk(ids);
+
+        // cleanup pós exclusão
+        clearPersistedSelection();
+      } catch (err) {
+        console.error('Erro no bulk delete:', err);
+        alert('Falha ao excluir selecionados: ' + (err && err.message ? err.message : err));
+      } finally {
+        refreshBulkStateAndSelectAll();
       }
-      confirmAndDeleteBulk(ids);
     });
   }
 
@@ -954,22 +997,25 @@ document.addEventListener('DOMContentLoaded', () => {
           pageCheckboxes.forEach(cb => { cb.checked = false; });
           selectedIds.clear();
           window._entradaSelectedAllPages = false;
+          setSelectAllFlag(false);
+          saveSelectedIds();
           refreshBulkStateAndSelectAll();
           return;
         }
 
-        // marcar visíveis
+        // quando marcar:
         pageCheckboxes.forEach(cb => {
           cb.checked = true;
           selectedIds.add(String(cb.dataset.id));
         });
+        saveSelectedIds();
         refreshBulkStateAndSelectAll();
 
-        // buscar todos ids com filtros (selecionar across pages)
         try {
-          await selectAllAcrossPages();
-          // re-sincronizar checkboxes visuais com o conjunto selecionado
-          modalContent.querySelectorAll('.selectEntrada').forEach(cb => { if (selectedIds.has(cb.dataset.id)) cb.checked = true; });
+          const count = await selectAllAcrossPages(); // já popula selectedIds com TODOS os ids do filtro
+          // marca persistência e flag "todas páginas"
+          setSelectAllFlag(true);
+          saveSelectedIds();
         } catch (err) {
           console.error('Erro ao selecionar todas as páginas automaticamente:', err);
           alert('Falha ao selecionar todas as páginas. Seleção limitada à página atual.');
@@ -988,7 +1034,9 @@ document.addEventListener('DOMContentLoaded', () => {
         else {
           selectedIds.delete(id);
           window._entradaSelectedAllPages = false;
+          setSelectAllFlag(false); // desliga a flag global se o usuário desmarcou manualmente
         }
+        saveSelectedIds();
         refreshBulkStateAndSelectAll();
       });
     });

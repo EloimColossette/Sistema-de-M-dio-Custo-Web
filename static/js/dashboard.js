@@ -3,53 +3,42 @@ document.addEventListener('DOMContentLoaded', () => {
   const sidebar = document.getElementById('sidebar');
 
   // 1) Toggle manual do sidebar
-  document.getElementById('toggleSidebar')
-    .addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+  const toggleBtn = document.getElementById('toggleSidebar');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+  }
 
-  // 2) Submenu “Base de Material/Produto”
-  const reportsItem    = document.getElementById('reportsItem');
-  const reportsSubmenu = document.getElementById('reportsSubmenu');
+  // helper para submenus (refactor)
+  function wireSubmenu(itemId, submenuId) {
+    const item = document.getElementById(itemId);
+    const submenu = document.getElementById(submenuId);
+    if (!item || !submenu) return;
 
-  reportsItem.addEventListener('click', () => {
-    sidebar.classList.remove('collapsed');
+    item.addEventListener('click', (ev) => {
+      ev.stopPropagation();            // evita que o document click feche imediatamente
+      sidebar.classList.remove('collapsed');
+      const open = submenu.classList.toggle('visible');
+      item.classList.toggle('submenu-open', open);
+    });
+  }
 
-    if (reportsSubmenu.classList.contains('visible')) {
-      reportsSubmenu.classList.remove('visible');
-      reportsItem.classList.remove('submenu-open');
-    } else {
-      reportsSubmenu.classList.add('visible');
-      reportsItem.classList.add('submenu-open');
-    }
-  });
+  // registra os submenus
+  wireSubmenu('reportsItem','reportsSubmenu');
+  wireSubmenu('nfItem','nfSubmenu');
+  wireSubmenu('calculosItem','calculosSubmenu');
 
+  // listener global para fechar qualquer submenu quando clicar fora
   document.addEventListener('click', (e) => {
-    if (!reportsItem.contains(e.target) && !reportsSubmenu.contains(e.target)) {
-      reportsSubmenu.classList.remove('visible');
-      reportsItem.classList.remove('submenu-open');
-    }
-  });
-
-  // 3) Submenu “Nota Fiscal”
-  const nfItem    = document.getElementById('nfItem');
-  const nfSubmenu = document.getElementById('nfSubmenu');
-
-  nfItem.addEventListener('click', () => {
-    sidebar.classList.remove('collapsed');
-
-    if (nfSubmenu.classList.contains('visible')) {
-      nfSubmenu.classList.remove('visible');
-      nfItem.classList.remove('submenu-open');
-    } else {
-      nfSubmenu.classList.add('visible');
-      nfItem.classList.add('submenu-open');
-    }
-  });
-
-  document.addEventListener('click', (e) => {
-    if (!nfItem.contains(e.target) && !nfSubmenu.contains(e.target)) {
-      nfSubmenu.classList.remove('visible');
-      nfItem.classList.remove('submenu-open');
-    }
+    const items = ['reportsItem','nfItem','calculosItem'];
+    items.forEach(id => {
+      const item = document.getElementById(id);
+      const submenu = document.getElementById(id.replace('Item','Submenu'));
+      if (!item || !submenu) return;
+      if (!item.contains(e.target) && !submenu.contains(e.target)) {
+        submenu.classList.remove('visible');
+        item.classList.remove('submenu-open');
+      }
+    });
   });
 
   // ─────────── Sistema de abas (permanece igual) ───────────
@@ -61,10 +50,13 @@ document.addEventListener('DOMContentLoaded', () => {
     tabBtns.forEach(b => b.classList.remove('active'));
     contents.forEach(c => c.classList.remove('active'));
     btn.classList.add('active');
-    document.getElementById(btn.dataset.tab).classList.add('active');
-    const { offsetLeft: left, offsetWidth: width } = btn;
-    indicator.style.left  = left + 'px';
-    indicator.style.width = width + 'px';
+    const target = document.getElementById(btn.dataset.tab);
+    if (target) target.classList.add('active');
+    const { offsetLeft: left = 0, offsetWidth: width = 0 } = btn;
+    if (indicator) {
+      indicator.style.left  = left + 'px';
+      indicator.style.width = width + 'px';
+    }
   }
 
   tabBtns.forEach(btn => btn.addEventListener('click', () => activateTab(btn)));
@@ -74,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ─────────── Toggle do popup do usuário (permanece igual) ───────────
   const userMenu = document.getElementById('userMenu');
   document.addEventListener('click', (event) => {
+    if (!userMenu) return;
     const isClickInside = userMenu.contains(event.target);
     if (isClickInside) {
       userMenu.classList.toggle('open');
@@ -166,7 +159,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     nfButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
         const nfId = btn.getAttribute('data-nf');
         const parentRow = btn.closest('.nf-row');
         if (!parentRow) return;

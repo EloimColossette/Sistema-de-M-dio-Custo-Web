@@ -54,7 +54,24 @@
         </li>
       </ul>
 
-      <a href="#" class="menu-item"><span class="icon">🧮</span><span class="label">Cálculos e Médias</span></a>
+      <div class="menu-item has-submenu" id="calculosItem">
+        <span class="icon">🧮</span>
+        <span class="label">Cálculos e Médias</span>
+      </div>
+      <ul class="submenu hidden" id="calculosSubmenu">
+        <li>
+          <a href="#" class="{% if request.endpoint=='calculos.calculos_nfs' %}active{% endif %}">
+            <span class="sub-icon">📊</span>
+            <span class="sub-label">Cálculos de NFs</span>
+          </a>
+        </li>
+        <li>
+          <a href="#" class="{% if request.endpoint=='calculos.media_custo' %}active{% endif %}">
+            <span class="sub-icon">🔢</span>
+            <span class="sub-label">Média de Custo</span>
+          </a>
+        </li>
+      </ul>
       <a href="#" class="menu-item"><span class="icon">📋</span><span class="label">Relatórios</span></a>
       <a href="#" class="menu-item"><span class="icon">📈</span><span class="label">Graficos de Cotação</span></a>
     </nav>

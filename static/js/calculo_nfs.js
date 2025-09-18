@@ -1,8 +1,4 @@
 // static/js/calculo_nfs.js
-// Versão com exibição de quais NFs foram alteradas após distribuir_quantidade
-// destaca APENAS A ÚLTIMA linha alterada (última fatia da distribuição)
-// removido: salvar, excluir, checkboxes; edit virou um toggle simples
-
 document.addEventListener('DOMContentLoaded', () => {
   const page = document.getElementById('calc-nfs-page');
   if (!page) return;
@@ -42,9 +38,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return intPart + ',' + decPart;
   }
 
-  // -------------------------
-  // Modal helper para exibir resultados
-  // -------------------------
   function showResultModal(title, items, totalAlterado) {
     const old = document.getElementById('cnf-result-modal');
     if (old) old.remove();
@@ -87,12 +80,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const row = document.createElement('div');
       row.style.padding = '8px';
       row.style.borderBottom = '1px solid #eee';
-
       const nfLine = document.createElement('div');
       nfLine.style.fontWeight = '600';
       nfLine.textContent = `NF: ${it.nf_display}`;
       row.appendChild(nfLine);
-
       const details = document.createElement('div');
       details.style.fontSize = '13px';
       details.style.marginTop = '4px';
@@ -122,13 +113,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(modal);
   }
 
-  // -------------------------
-  // BOTÕES + / - (incremento/decremento) — com integração distribuir_quantidade
-  // -------------------------
+  // Add / subtract behavior (keeps your original server call)
   page.addEventListener('click', ev => {
     const btn = ev.target.closest('.btn-icon');
     if (!btn) return;
-
     ev.preventDefault();
 
     if (formNova && formNova.contains(btn)) {
@@ -161,7 +149,6 @@ document.addEventListener('DOMContentLoaded', () => {
           const altered = data && data.quantidade_total_alterada ? data.quantidade_total_alterada : '0';
           const detalhes = data && data.detalhes ? data.detalhes : [];
 
-          // --- seleciona apenas as linhas que realmente mudaram ---
           const changed = (detalhes || []).filter(d => {
             const antes = Number(d.qtd_anterior ?? 0);
             const depois = Number(d.qtd_nova ?? 0);
@@ -169,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return alt !== 0 || antes !== depois;
           });
 
-          // atualiza todos os inputs das linhas que mudaram (mantendo consistência)
+          // atualiza inputs
           changed.forEach(d => {
             const entradaId = String(d.entrada_id);
             const tr = page.querySelector(`tbody tr[data-entrada-id="${entradaId}"]`);
@@ -178,17 +165,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (inputQtd) inputQtd.value = formatBR(d.qtd_nova, DECIMALS.quantidade_estoque);
           });
 
-          // ------ NOVA REGRA: destacar A ÚLTIMA linha alterada ------
-          // escolhe a última alteração (a "última fatia" aplicada)
+          // destaque: escolhe a última alteração
           let destaque = null;
-          if (changed.length > 0) {
-            destaque = changed[changed.length - 1]; // último item na ordem retornada pelo backend
-          }
+          if (changed.length > 0) destaque = changed[changed.length - 1];
 
-          // remove destaque antigo
-          $$('tbody tr.linha-alterada').forEach(tr => tr.classList.remove('linha-alterada'));
+          // remove destaque antigo (tr e tds)
+          $$('tbody tr.linha-alterada').forEach(tr => {
+            tr.classList.remove('linha-alterada');
+            tr.querySelectorAll('td').forEach(td => td.classList.remove('linha-alterada'));
+          });
 
-          // monta items para o modal e aplica destaque somente na linha escolhida (a última)
+          // monta items e aplica destaque apenas na linha escolhida (a última)
           const items = (detalhes || []).map(d => {
             const entradaId = String(d.entrada_id);
             const tr = page.querySelector(`tbody tr[data-entrada-id="${entradaId}"]`);
@@ -197,10 +184,11 @@ document.addEventListener('DOMContentLoaded', () => {
               const td_nf = tr.querySelector('.td-nf');
               if (td_nf) nf_display = td_nf.textContent.trim() || entradaId;
 
-              // se esta for a última linha alterada, aplica a classe e faz scroll
+              // aplica destaque na <tr> e nas <td> (garante que sticky cells também fiquem amareladas)
               if (destaque && String(destaque.entrada_id) === entradaId) {
                 tr.classList.add('linha-alterada');
-                // pequeno delay para garantir que DOM já recebeu o novo valor
+                tr.querySelectorAll('td').forEach(td => td.classList.add('linha-alterada'));
+                // scroll to highlighted row
                 setTimeout(() => tr.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
               }
             }
@@ -230,7 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // comportamento local de incrementar/decrementar um input da linha
+    // local +/- behavior for input on same row (unchanged)
     const container = btn.closest('.form-actions-inline') || btn.closest('.form-row') || btn.closest('tr') || page;
     if (!container) return;
     const input = container.querySelector('input.inline-input, input.input-inline, input[data-field]');
@@ -242,39 +230,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const decimals = DECIMALS[field] ?? 0;
     const step = Math.pow(10, -decimals);
 
-    if (btn.classList.contains('plus') || btn.textContent.trim() === '+') {
-      value += step;
-    } else if (btn.classList.contains('minus') || btn.textContent.trim() === '−' || btn.textContent.trim() === '-') {
-      value = Math.max(0, value - step);
-    }
+    if (btn.classList.contains('plus') || btn.textContent.trim() === '+') value += step;
+    else if (btn.classList.contains('minus') || btn.textContent.trim() === '−' || btn.textContent.trim() === '-') value = Math.max(0, value - step);
 
     input.value = formatBR(value, decimals);
     input.dispatchEvent(new Event('change'));
   });
 
-  // -------------------------
-  // EDIT (toggle apenas - sem salvar/excluir)
-  // -------------------------
+  // EDIT toggle
   page.addEventListener('click', ev => {
     const editBtn = ev.target.closest('.edit-icon, .edit');
     if (!editBtn) return;
-
     const tr = editBtn.closest('tr');
     if (!tr) return;
-
-    const isEditing = tr.classList.toggle('editing'); // toggle state
-    tr.querySelectorAll('.inline-input, .input-inline, input[data-field], select[data-field]').forEach(i => {
-      // habilita/desabilita campos conforme estado de edição
-      i.disabled = !isEditing;
-    });
-
-    // altera o texto do botão para indicar estado — simples e útil
+    const isEditing = tr.classList.toggle('editing');
+    tr.querySelectorAll('.inline-input, .input-inline, input[data-field], select[data-field]').forEach(i => { i.disabled = !isEditing; });
     editBtn.textContent = isEditing ? 'OK' : '✏️';
   });
 
-  // -------------------------
-  // BUSCA
-  // -------------------------
+  // Busca
   const search = $('#search_nf');
   if (search) {
     search.addEventListener('input', () => {
@@ -288,9 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // -------------------------
-  // Helpers de formatação e paste
-  // -------------------------
+  // formatação / paste handlers (mantive os seus)
   function formatInputValueForDisplay(raw, decimals) {
     if (raw === null || raw === undefined || raw === '') return '';
     const n = Number(String(raw).replace(',', '.').replace(/\s/g, ''));
@@ -343,4 +315,79 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // Sticky columns: Data(0), NF(1), Produto(2)
+  (function initStickyColumns() {
+    const tableContainer = document.querySelector('.table-container');
+    const table = tableContainer?.querySelector('table');
+    if (!table) return;
+
+    function setStickyLefts() {
+      const theadTr = table.querySelector('thead tr');
+      if (!theadTr) return;
+      const ths = Array.from(theadTr.children);
+      const stickyIndexes = [0,1,2];
+
+      // limpa estilos anteriores
+      stickyIndexes.forEach(idx => {
+        const headSel = `.table-container table thead th:nth-child(${idx+1})`;
+        const bodySel = `.table-container table tbody td:nth-child(${idx+1})`;
+        document.querySelectorAll(headSel + ',' + bodySel).forEach(el => {
+          el.classList.remove('sticky-col');
+          el.style.left = '';
+          el.style.position = '';
+          el.style.zIndex = '';
+          el.style.background = '';
+          el.style.boxShadow = '';
+        });
+      });
+
+      let left = 0;
+      stickyIndexes.forEach(idx => {
+        const th = ths[idx];
+        if (!th) return;
+        const width = Math.ceil(th.getBoundingClientRect().width);
+
+        const headSelector = `.table-container table thead th:nth-child(${idx+1})`;
+        const bodySelector = `.table-container table tbody td:nth-child(${idx+1})`;
+
+        document.querySelectorAll(headSelector).forEach(el => {
+          el.style.position = 'sticky';
+          el.style.left = left + 'px';
+          el.style.zIndex = 250;
+          el.style.background = '#f8f9fa';
+          el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.04)';
+          el.classList.add('sticky-col');
+        });
+
+        document.querySelectorAll(bodySelector).forEach(el => {
+          el.style.position = 'sticky';
+          el.style.left = left + 'px';
+          el.style.zIndex = 120;
+          el.style.background = '#fff';
+          el.style.boxShadow = '2px 0 6px rgba(0,0,0,0.06)';
+          el.classList.add('sticky-col');
+        });
+
+        left += width;
+      });
+    }
+
+    setStickyLefts();
+    let tmr = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(tmr);
+      tmr = setTimeout(setStickyLefts, 120);
+    });
+
+    tableContainer.addEventListener('scroll', () => {
+      // opcional: setStickyLefts() se necessário
+    });
+
+    /* opcional:
+    const mo = new MutationObserver(() => setStickyLefts());
+    mo.observe(table, { childList:true, subtree:true, characterData:true });
+    */
+  })();
+
 });

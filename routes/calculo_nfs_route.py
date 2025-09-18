@@ -1,9 +1,11 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, send_file
 from routes.auth_routes import login_required
 from conexao_db import conectar
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import io
 import pandas as pd
+import unicodedata
+import re
 
 calculo_bp = Blueprint('calculo_nfs', __name__, url_prefix='/calculo_nfs')
 
@@ -95,6 +97,48 @@ def sincronizar_estoque_por_entrada():
         cur.close()
         conn.close()
 
+def normalize_name(s):
+    """
+    Normaliza um nome para comparação:
+      - remove acentos
+      - remove conteúdo entre parênteses (ex: "(3,17mm)")
+      - substitui '~' por espaço
+      - remove símbolos/pontuação (mantém letras e números e espaços)
+      - colapsa espaços e transforma em UPPER
+    """
+    if not s:
+        return ''
+    t = str(s)
+
+    # remover acentos
+    t = unicodedata.normalize('NFD', t)
+    t = ''.join(ch for ch in t if unicodedata.category(ch) != 'Mn')
+
+    # remove conteúdo entre parênteses (por exemplo: " (3,17mm)" )
+    t = re.sub(r'\(.*?\)', ' ', t)
+
+    # substitui til/tilde e similares por espaço
+    t = t.replace('~', ' ')
+
+    # remove 'mm' isolado (por precaução)
+    t = re.sub(r'\bmm\b', ' ', t, flags=re.IGNORECASE)
+
+    # remove caracteres que não são letras, números ou espaço
+    t = re.sub(r'[^0-9A-Za-z\s]', ' ', t)
+
+    # colapsa espaços e uppercase
+    t = re.sub(r'\s+', ' ', t).strip().upper()
+    return t
+
+def _normalize_upper_no_space(s):
+    if not s:
+        return ''
+    t = str(s).strip().upper()
+    # remove acentos
+    t = ''.join(c for c in unicodedata.normalize('NFD', t) if unicodedata.category(c) != 'Mn')
+    # remove espaços extras
+    t = t.replace('\r', '').replace('\n', '').replace('\t', '').strip()
+    return t
 
 @calculo_bp.route('/', methods=['GET'])
 @login_required
@@ -107,14 +151,17 @@ def listar_calculo_nfs():
     conn = conectar()
     cur = conn.cursor()
     try:
-        # Dados do estoque
+        # Dados do estoque: incluindo fornecedor, material_1..5 e peso_integral da entrada_nf
         cur.execute("""
             SELECT
                 en.id AS entrada_id,
                 en.data AS entrada_data,
                 en.nf AS entrada_nf,
                 en.produto AS entrada_produto,
+                en.fornecedor AS entrada_fornecedor,
+                en.material_1, en.material_2, en.material_3, en.material_4, en.material_5,
                 en.peso_liquido AS peso_liquido,
+                en.peso_integral AS peso_integral,
                 cn.id AS calculo_id,
                 COALESCE(cn.quantidade_estoque, 0) AS quantidade_estoque,
                 cn.qtd_cobre, cn.qtd_zinco,
@@ -133,16 +180,23 @@ def listar_calculo_nfs():
                 'data': r[1],
                 'nf': r[2],
                 'produto': r[3],
-                'peso_liquido': r[4],
-                'id': r[5],
-                'quantidade_estoque': r[6],
-                'qtd_cobre': r[7],
-                'qtd_zinco': r[8],
-                'valor_total_nf': r[9],
-                'mao_de_obra': r[10],
-                'materia_prima': r[11],
-                'custo_total_manual': r[12],
-                'custo_total': r[13],
+                'fornecedor': r[4],
+                'material_1': r[5],
+                'material_2': r[6],
+                'material_3': r[7],
+                'material_4': r[8],
+                'material_5': r[9],
+                'peso_liquido': r[10],
+                'peso_integral': r[11],
+                'id': r[12],
+                'quantidade_estoque': r[13],
+                'qtd_cobre': r[14],
+                'qtd_zinco': r[15],
+                'valor_total_nf': r[16],
+                'mao_de_obra': r[17],
+                'materia_prima': r[18],
+                'custo_total_manual': r[19],
+                'custo_total': r[20],
             })
 
         # Formata datas
@@ -163,6 +217,131 @@ def listar_calculo_nfs():
                     reg['data'] = str(d).split()[0]
             else:
                 reg['data'] = None
+
+        # ------------------------------
+        # Pré-carrega produtos, fornecedores e materiais em memória (mapas)
+        # ------------------------------
+        prod_map = {}   # chave: normalize_name(nome) -> percentual_cobre (fração, ex: 0.125)
+        forn_map = {}   # chave: normalize_name(nome_fornecedor) -> fornecedor_id
+        materials_by_fornecedor = {}  # (mat_key, fornecedor_id) -> (grupo_lower, Decimal(valor))
+        materials_fallback = {}       # mat_key -> (grupo_lower, Decimal(valor))
+
+        try:
+            cur.execute("SELECT nome, percentual_cobre FROM produtos")
+            for nome, pct in cur.fetchall():
+                key = normalize_name(nome)
+                try:
+                    prod_map[key] = (Decimal(str(pct)) / Decimal('100')) if pct is not None else None
+                except Exception:
+                    prod_map[key] = None
+        except Exception as e:
+            print("Aviso: falha ao carregar produtos:", e)
+            prod_map = {}
+
+        try:
+            cur.execute("SELECT id, nome FROM fornecedores")
+            for fid, nome in cur.fetchall():
+                if nome:
+                    forn_map[normalize_name(nome)] = fid
+        except Exception as e:
+            print("Aviso: falha ao carregar fornecedores:", e)
+            forn_map = {}
+
+        try:
+            cur.execute("SELECT id, nome, fornecedor_id, grupo, valor FROM materiais")
+            for mid, nome, fornecedor_id, grupo, valor in cur.fetchall():
+                key = normalize_name(nome)
+                try:
+                    valor_dec = Decimal(str(valor)) if valor is not None else None
+                except Exception:
+                    valor_dec = None
+                grp = (grupo or '').strip()
+                if fornecedor_id is not None:
+                    materials_by_fornecedor[(key, int(fornecedor_id))] = (grp.lower(), valor_dec)
+                if key not in materials_fallback:
+                    materials_fallback[key] = (grp.lower(), valor_dec)
+        except Exception as e:
+            print("Aviso: falha ao carregar materiais:", e)
+            materials_by_fornecedor = {}
+            materials_fallback = {}
+
+        # ------------------------------
+        # Calcula qtd_cobre usando os mapas em memória (muito mais rápido)
+        # ------------------------------
+        for reg in registros:
+            try:
+                existing = reg.get('qtd_cobre')
+                # Se já tem valor (não nulo e não zero), mantemos
+                if existing is not None and float(existing) != 0:
+                    continue
+
+                produto_nome = reg.get('produto') or ''
+                fornecedor_nome = reg.get('fornecedor') or ''
+                materiais_list = [reg.get('material_1'), reg.get('material_2'), reg.get('material_3'),
+                                  reg.get('material_4'), reg.get('material_5')]
+                peso_liq = reg.get('peso_liquido') or 0
+                peso_int = reg.get('peso_integral') or 0
+
+                prod_key = normalize_name(produto_nome)
+                percent_cobre = prod_map.get(prod_key)
+
+                # tentativa por aproximação (substring/prefix) caso não encontre exato
+                if percent_cobre is None:
+                    for k in prod_map.keys():
+                        if not k:
+                            continue
+                        if (prod_key and (k.startswith(prod_key) or prod_key.startswith(k) or k in prod_key or prod_key in k)):
+                            percent_cobre = prod_map.get(k)
+                            if percent_cobre is not None:
+                                break
+
+                if not percent_cobre or percent_cobre == 0:
+                    # sem percentual => não calcula
+                    continue
+
+                forn_key = normalize_name(fornecedor_nome)
+                fornecedor_id = forn_map.get(forn_key)
+
+                qtd_cobre_calc = None
+                # percorre materiais procurando material do grupo cobre
+                for mat in materiais_list:
+                    if not mat:
+                        continue
+                    mat_key = normalize_name(mat)
+
+                    # tenta localizar pelo (nome, fornecedor)
+                    mat_info = None
+                    if fornecedor_id is not None:
+                        mat_info = materials_by_fornecedor.get((mat_key, fornecedor_id))
+                    # fallback por nome apenas
+                    if not mat_info:
+                        mat_info = materials_fallback.get(mat_key)
+
+                    if not mat_info:
+                        continue
+
+                    grupo, valor_mat = mat_info
+                    if valor_mat is None:
+                        continue
+                    # só considera grupos que contenham 'cobr' (cobre/Cobre)
+                    if grupo and 'cobr' in grupo.lower():
+                        try:
+                            pl = Decimal(str(peso_liq or 0))
+                            pi = Decimal(str(peso_int or 0))
+                            if valor_mat == 0:
+                                continue
+                            quantidade_cobre = ((pl - pi) * percent_cobre) / valor_mat
+                            if quantidade_cobre is not None and quantidade_cobre >= 0:
+                                qtd_cobre_calc = quantidade_cobre
+                                break
+                        except Exception:
+                            qtd_cobre_calc = None
+                            break
+
+                if qtd_cobre_calc is not None:
+                    reg['qtd_cobre'] = float(qtd_cobre_calc)
+            except Exception as e:
+                print("Aviso: erro calculando qtd_cobre para entrada_id", reg.get('entrada_id'), e)
 
         # Lista de produtos para dropdown: pega somente produtos únicos da entrada_nf
         cur.execute("""
@@ -271,8 +450,6 @@ def editar_registro_calculo(registro_id):
     finally:
         cur.close()
         conn.close()
-
-
 
 @calculo_bp.route('/update_custo_manual', methods=['POST'])
 @login_required
@@ -427,6 +604,147 @@ def distribuir_quantidade():
         'quantidade_total_alterada': str(total_alterado),
         'detalhes': detalhes
     }), 200
+
+def calcular_qtd_cobre(cursor, produto_nome, fornecedor_nome, materiais_list, peso_liquido, peso_integral,
+                       prod_map=None, forn_map=None, materials_by_fornecedor=None, materials_fallback=None):
+    """
+    Função compatível para calcular qtd_cobre. Se os mapas (prod_map, forn_map, ...) forem passados,
+    usa-os (sem novas queries). Caso contrário, faz queries ao DB (com a mesma lógica).
+    Retorna Decimal ou None.
+    """
+    try:
+        pl = Decimal(str(peso_liquido or 0))
+    except Exception:
+        pl = Decimal('0')
+
+    try:
+        pi = Decimal(str(peso_integral or 0))
+    except Exception:
+        pi = Decimal('0')
+
+    # tenta usar mapas pré-carregados
+    if prod_map is not None and materials_by_fornecedor is not None and materials_fallback is not None:
+        prod_key = normalize_name(produto_nome)
+        percent_cobre = prod_map.get(prod_key)
+        if percent_cobre is None:
+            for k in prod_map.keys():
+                if not k:
+                    continue
+                if (prod_key and (k.startswith(prod_key) or prod_key.startswith(k) or k in prod_key or prod_key in k)):
+                    percent_cobre = prod_map.get(k)
+                    if percent_cobre is not None:
+                        break
+        if not percent_cobre or percent_cobre == 0:
+            return None
+
+        forn_key = normalize_name(fornecedor_nome)
+        fornecedor_id = None
+        if forn_map is not None:
+            fornecedor_id = forn_map.get(forn_key)
+
+        for mat in (materiais_list or []):
+            if not mat:
+                continue
+            mat_key = normalize_name(mat)
+            mat_info = None
+            if fornecedor_id is not None:
+                mat_info = materials_by_fornecedor.get((mat_key, fornecedor_id))
+            if not mat_info:
+                mat_info = materials_fallback.get(mat_key)
+            if not mat_info:
+                continue
+            grupo, valor_mat = mat_info
+            if valor_mat is None:
+                continue
+            if grupo and 'cobr' in grupo.lower():
+                if valor_mat == 0:
+                    continue
+                try:
+                    quantidade_cobre = ((pl - pi) * percent_cobre) / valor_mat
+                    if quantidade_cobre < 0:
+                        return None
+                    return quantidade_cobre
+                except Exception:
+                    return None
+        return None
+
+    # -------------------
+    # fallback: buscar no DB (se mapas não foram passados)
+    # -------------------
+    produto_norm = normalize_name(produto_nome)
+    percent_cobre = None
+    try:
+        cursor.execute("SELECT percentual_cobre FROM produtos WHERE UPPER(TRIM(nome)) = %s LIMIT 1", (produto_norm,))
+        row = cursor.fetchone()
+        if row and row[0] is not None:
+            percent_cobre = Decimal(str(row[0])) / Decimal('100')
+    except Exception:
+        percent_cobre = None
+    if not percent_cobre or percent_cobre == 0:
+        return None
+
+    fornecedor_norm = normalize_name(fornecedor_nome)
+    fornecedor_id = None
+    try:
+        if fornecedor_norm:
+            cursor.execute("SELECT id FROM fornecedores WHERE UPPER(TRIM(nome)) = %s LIMIT 1", (fornecedor_norm,))
+            fr = cursor.fetchone()
+            if fr:
+                fornecedor_id = fr[0]
+    except Exception:
+        fornecedor_id = None
+
+    for mat in (materiais_list or []):
+        if not mat:
+            continue
+        mat_norm = normalize_name(mat)
+        mat_row = None
+        try:
+            if fornecedor_id is not None:
+                cursor.execute("""
+                    SELECT grupo, valor
+                    FROM materiais
+                    WHERE UPPER(TRIM(nome)) = %s AND fornecedor_id = %s
+                    LIMIT 1
+                """, (mat_norm, fornecedor_id))
+                mat_row = cursor.fetchone()
+        except Exception:
+            mat_row = None
+
+        if not mat_row:
+            try:
+                cursor.execute("""
+                    SELECT grupo, valor
+                    FROM materiais
+                    WHERE UPPER(TRIM(nome)) = %s
+                    LIMIT 1
+                """, (mat_norm,))
+                mat_row = cursor.fetchone()
+            except Exception:
+                mat_row = None
+
+        if not mat_row:
+            continue
+
+        grupo = (mat_row[0] or '').strip().lower()
+        valor_material = mat_row[1]
+        try:
+            valor_material = Decimal(str(valor_material))
+        except Exception:
+            valor_material = None
+
+        if valor_material and grupo and 'cobr' in grupo:
+            if valor_material == 0:
+                continue
+            try:
+                quantidade_cobre = ((pl - pi) * percent_cobre) / valor_material
+                if quantidade_cobre < 0:
+                    return None
+                return quantidade_cobre
+            except Exception:
+                return None
+
+    return None
 
 @calculo_bp.route('/calcular', methods=['POST'])
 @login_required

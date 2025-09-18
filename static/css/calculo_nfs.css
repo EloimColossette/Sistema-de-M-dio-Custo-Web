@@ -78,7 +78,6 @@ html, body {
 }
 .btn-back-dashboard:hover { text-decoration: underline; }
 
-/* Interno do card-add - reduz padding inferior para "subir" o próximo card */
 .card-add .card-body {
   padding: var(--card-add-padding-vertical) 16px 8px 16px;
 }
@@ -180,7 +179,7 @@ html, body {
 }
 .btn-delete-selected:hover { background-color: #c82333; }
 
-/* =========================
+ /* =========================
    CARD LIST (Tabela)
    ========================= */
 .card-list {
@@ -261,11 +260,12 @@ table {
   background-color: #fff;
 }
 
+/* Cabeçalho sticky no topo */
 table thead th {
   position: sticky;
   top: 0;
   background-color: #f8f9fa;
-  z-index: 2;
+  z-index: 100;   /* cabeçalho por cima de tudo */
   box-shadow: 0 2px 4px rgba(0,0,0,0.04);
   border-bottom: 1px solid #e0e0e0;
 }
@@ -277,7 +277,10 @@ table td {
   font-size: 0.95rem;
 }
 
-table th { color: #333; text-align: left; }
+/* ====== ALTERAÇÃO SOLICITADA: CENTRALIZAR TÍTULOS E CONTEÚDO DAS CÉLULAS ====== */
+table th { color: #333; text-align: center; }
+table td { text-align: center; } /* <-- aqui centraliza todo o conteúdo das células */
+/* ================================================================== */
 
 table tr:nth-child(even) { background-color: #fbfbfb; }
 table tr:hover { background-color: #f1f3f5; }
@@ -294,10 +297,160 @@ table .no-data { text-align: center; color: #777; padding: 24px; }
   border: 1px solid #ccc;
   border-radius: 4px;
   transition: border-color 0.2s;
+  box-sizing: border-box;
+  /* alinhamento centralizado por requisição */
+  text-align: center;
+  min-width: 80px; /* garante um mínimo de largura do input */
 }
 .input-inline:disabled { background-color: transparent; border-color: transparent; color: #333; cursor: default; }
 .input-inline:not(:disabled) { background-color: #fff; }
 .input-inline:focus { outline: none; border-color: #007bff; }
+
+/* Aumenta largura mínima da tabela inteira para evitar truncamento */
+.table-container table { min-width: 1600px; }
+
+/* =========================
+   LARGURAS MÍNIMAS POR COLUNA (ajuste conforme necessário)
+   ========================= */
+
+/* Coluna 1 (Data) */
+.table-container table thead th:nth-child(1),
+.table-container table tbody td:nth-child(1) {
+  min-width: 100px;
+}
+
+/* OBS: As regras estáticas para as colunas 2/3 foram removidas.
+   O posicionamento ('left') será calculado dinamicamente via JS. */
+
+/* Coluna 2 (NF) largura mínima */
+.table-container table thead th:nth-child(2),
+.table-container table tbody td:nth-child(2) {
+  min-width: 180px;
+}
+
+/* Coluna 3 (Produto) largura mínima */
+.table-container table thead th:nth-child(3),
+.table-container table tbody td:nth-child(3) {
+  min-width: 260px; /* mais larga para nomes */
+}
+
+/* Coluna 4 (Peso Líquido) */
+.table-container table thead th:nth-child(4),
+.table-container table tbody td:nth-child(4) {
+  min-width: 120px;
+}
+.table-container table tbody td:nth-child(4) .input-inline {
+  min-width: 120px;
+}
+
+/* Coluna 5 (Qtd Estoque) */
+.table-container table thead th:nth-child(5),
+.table-container table tbody td:nth-child(5) {
+  min-width: 160px;
+}
+.table-container table tbody td:nth-child(5) .input-inline {
+  min-width: 160px;
+}
+
+/* Coluna 6 (Qtd Cobre) — a que você pediu especificamente */
+.table-container table thead th:nth-child(6),
+.table-container table tbody td:nth-child(6) {
+  min-width: 180px;
+}
+.table-container table tbody td:nth-child(6) .input-inline {
+  min-width: 180px;
+}
+
+/* Coluna 7 (Qtd Zinco) */
+.table-container table thead th:nth-child(7),
+.table-container table tbody td:nth-child(7) {
+  min-width: 140px;
+}
+.table-container table tbody td:nth-child(7) .input-inline {
+  min-width: 140px;
+}
+
+/* Coluna 8 (Valor Total NFs) */
+.table-container table thead th:nth-child(8),
+.table-container table tbody td:nth-child(8) {
+  min-width: 200px;
+}
+.table-container table tbody td:nth-child(8) .input-inline {
+  min-width: 200px;
+  text-align: center;
+}
+
+/* Coluna 9 (Mão de Obra) */
+.table-container table thead th:nth-child(9),
+.table-container table tbody td:nth-child(9) {
+  min-width: 140px;
+}
+.table-container table tbody td:nth-child(9) .input-inline {
+  min-width: 140px;
+}
+
+/* Coluna 10 (Matéria Prima) */
+.table-container table thead th:nth-child(10),
+.table-container table tbody td:nth-child(10) {
+  min-width: 140px;
+}
+.table-container table tbody td:nth-child(10) .input-inline {
+  min-width: 140px;
+}
+
+/* Coluna 11 (Custo Total Manual) */
+.table-container table thead th:nth-child(11),
+.table-container table tbody td:nth-child(11) {
+  min-width: 180px;
+}
+.table-container table tbody td:nth-child(11) .input-inline {
+  min-width: 180px;
+}
+
+/* Coluna 12 (Custo Total) */
+.table-container table thead th:nth-child(12),
+.table-container table tbody td:nth-child(12) {
+  min-width: 180px;
+}
+.table-container table tbody td:nth-child(12) .input-inline {
+  min-width: 180px;
+}
+
+/* Coluna 13 (Ações) */
+.table-container table thead th:nth-child(13),
+.table-container table tbody td:nth-child(13) {
+  width: 140px;
+  text-align: center;
+}
+
+.table-container table tbody td {
+  z-index: 1;
+  background: transparent; /* deixa o background visível apenas nos stickies */
+}
+
+/* =========================
+   BASE PARA STICKY COLUMNS (JS define left/z-index)
+   ========================= */
+.table-container table thead th.sticky-col,
+.table-container table tbody td.sticky-col {
+  position: sticky; /* o left será definido pelo JS inline */
+  background-clip: padding-box;
+  box-shadow: 2px 0 6px rgba(0,0,0,0.06);
+}
+
+.table-container table thead th.sticky-col {
+  z-index: 220; /* header sticky deve ficar acima das células do corpo */
+  background: #f8f9fa;
+}
+
+.table-container table tbody td.sticky-col {
+  z-index: 120;
+  background: #fff;
+}
+
+/* =========================
+   FIM DAS ALTERAÇÕES DE LARGURA
+   ========================= */
 
 /* Ícones */
 .icon {
@@ -350,7 +503,6 @@ table .no-data { text-align: center; color: #777; padding: 24px; }
 .table-container table td {
   white-space: nowrap;
 }
-.table-container table { min-width: 1200px; }
 
 /* =======================
    BOTÕES AO LADO DO CAMPO QUANTIDADE
@@ -393,7 +545,6 @@ table .no-data { text-align: center; color: #777; padding: 24px; }
    REMOÇÕES / CORREÇÕES DE LINHAS E FOCOS
    ========================= */
 
-/* remove outline/box-shadow padrão para elementos com foco nessa área */
 .card-list :focus,
 .card-add :focus,
 .card-list .card-header :focus,
@@ -407,7 +558,6 @@ a:focus {
   box-shadow: none !important;
 }
 
-/* força cabeçalho do card-list e table-container com fundo branco e sem borda */
 .card-list .card-header,
 .table-container {
   background: #fff !important;
@@ -415,7 +565,6 @@ a:focus {
   box-shadow: none !important;
 }
 
-/* remove bordas visíveis entre cards (se houver) */
 .card-list,
 .card-list .card-header,
 .card-add {
@@ -426,7 +575,6 @@ a:focus {
   border-color: transparent !important;
 }
 
-/* neutraliza pseudo-elementos que possam desenhar linhas (before/after) */
 .card-list::before,
 .card-list::after,
 .card-add::before,
@@ -437,7 +585,6 @@ a:focus {
   display: none !important;
 }
 
-/* esconde qualquer <hr> residual no layout */
 #calc-nfs-page hr,
 .card-list hr,
 .card-add hr {

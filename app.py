@@ -8,6 +8,7 @@ from routes.produtos_routes import produtos_bp
 from routes.saida_nf_routes import saida_nf_bp
 from routes.entrada_nf_route import entrada_nf_bp
 from routes.calculo_nfs_route import calculo_bp
+
 app = Flask(__name__)
 app.secret_key = 'segredo'  # Necessário para flash e sessão
 

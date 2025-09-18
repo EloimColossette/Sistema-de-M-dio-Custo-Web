@@ -1,11 +1,14 @@
-// calculo_nfs.js — comportamento para estoque_quantidade
+// static/js/calculo_nfs.js
+// Versão com exibição de quais NFs foram alteradas após distribuir_quantidade
+// destaca APENAS A ÚLTIMA linha alterada (última fatia da distribuição)
+// removido: salvar, excluir, checkboxes; edit virou um toggle simples
+
 document.addEventListener('DOMContentLoaded', () => {
   const page = document.getElementById('calc-nfs-page');
-
+  if (!page) return;
   const $ = sel => page.querySelector(sel);
   const $$ = sel => Array.from(page.querySelectorAll(sel));
 
-  // configurações: quantidades de casas por campo
   const DECIMALS = {
     quantidade_estoque: 3,
     qtd_cobre: 3,
@@ -14,171 +17,315 @@ document.addEventListener('DOMContentLoaded', () => {
     mao_de_obra: 2,
     materia_prima: 2,
     custo_total_manual: 2,
-    custo_total: 2
+    custo_total: 2,
+    peso_liquido: 3
   };
 
-  // editar/ativar inputs
-  page.addEventListener('click', (ev) => {
-    const editBtn = ev.target.closest('.edit');
-    if (editBtn) {
-      const tr = editBtn.closest('tr');
-      tr.querySelectorAll('.inline-input').forEach(i => i.disabled = false);
-      editBtn.classList.add('hidden');
-      tr.querySelector('.save').classList.remove('hidden');
-    }
+  const formNova = $('#form-nova-entrada');
+  const selectNovoProduto = formNova ? formNova.querySelector('select[name="id_produto"], #novo_produto') : null;
+  const inputNovoQtd = formNova ? formNova.querySelector('input[name="quantidade_estoque"], #novo_qtd') : null;
 
-    const saveBtn = ev.target.closest('.save');
-    if (saveBtn) {
-      const tr = saveBtn.closest('tr');
-      const id = tr.dataset.id;
-      const payload = {};
+  function parseBRNumber(str) {
+    if (str === null || str === undefined) return NaN;
+    const s = String(str).trim();
+    if (s === '') return NaN;
+    return Number(s.replace(/\./g, '').replace(',', '.'));
+  }
 
-      tr.querySelectorAll('.inline-input').forEach(el => {
-        const field = el.dataset.field;
-        let val = el.value.trim();
+  function formatBR(n, decimals) {
+    if (n === null || n === undefined || isNaN(n)) return '';
+    const fixed = Number(n).toFixed(decimals);
+    const parts = fixed.split('.');
+    let intPart = parts[0];
+    const decPart = parts[1] || '';
+    intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return intPart + ',' + decPart;
+  }
 
-        // if select => take value directly
-        if (el.tagName.toLowerCase() === 'select') {
-          payload[field] = el.value;
-          return;
-        }
+  // -------------------------
+  // Modal helper para exibir resultados
+  // -------------------------
+  function showResultModal(title, items, totalAlterado) {
+    const old = document.getElementById('cnf-result-modal');
+    if (old) old.remove();
 
-        // normalize brazilian number (e.g. "1.234,56" or "1234,56") -> "1234.56"
-        if (val === '') { payload[field] = null; return; }
-        // remove thousand separators, replace comma with dot
-        val = val.replace(/\./g, '').replace(',', '.');
-        // parse to float
-        const num = Number(val);
-        if (isNaN(num)) {
-          alert(`Valor inválido para ${field}: "${el.value}"`); throw 'invalid';
-        }
-        // send as string with dot decimal (DB-friendly)
-        payload[field] = num.toString();
-      });
+    const modal = document.createElement('div');
+    modal.id = 'cnf-result-modal';
+    modal.style.position = 'fixed';
+    modal.style.left = '0';
+    modal.style.top = '0';
+    modal.style.width = '100%';
+    modal.style.height = '100%';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.background = 'rgba(0,0,0,0.4)';
+    modal.style.zIndex = 9999;
 
-      // monta body urlencoded
-      const params = new URLSearchParams();
-      Object.keys(payload).forEach(k => {
-        if (payload[k] === null) params.append(k, '');
-        else params.append(k, payload[k]);
-      });
+    const box = document.createElement('div');
+    box.style.background = '#fff';
+    box.style.borderRadius = '8px';
+    box.style.padding = '16px';
+    box.style.minWidth = '320px';
+    box.style.maxWidth = '90%';
+    box.style.maxHeight = '80%';
+    box.style.overflow = 'auto';
+    box.style.boxShadow = '0 6px 30px rgba(0,0,0,0.25)';
 
-      fetch(`/calculo_nfs/edit/${id}`, {
+    const h = document.createElement('h3');
+    h.textContent = title;
+    h.style.marginTop = '0';
+    box.appendChild(h);
+
+    const summary = document.createElement('p');
+    summary.textContent = `Quantidade total alterada: ${totalAlterado}`;
+    box.appendChild(summary);
+
+    const list = document.createElement('div');
+    list.style.marginTop = '8px';
+    items.forEach(it => {
+      const row = document.createElement('div');
+      row.style.padding = '8px';
+      row.style.borderBottom = '1px solid #eee';
+
+      const nfLine = document.createElement('div');
+      nfLine.style.fontWeight = '600';
+      nfLine.textContent = `NF: ${it.nf_display}`;
+      row.appendChild(nfLine);
+
+      const details = document.createElement('div');
+      details.style.fontSize = '13px';
+      details.style.marginTop = '4px';
+      details.innerHTML = `
+        <div>entrada_id: ${it.entrada_id} — cn_id: ${it.cn_id}</div>
+        <div>alterado: ${it.alterado}</div>
+        ${it.qtd_anterior !== undefined ? `<div>anterior → ${it.qtd_anterior} / nova → ${it.qtd_nova}</div>` : ''}
+        ${it.motivo ? `<div>motivo: ${it.motivo}</div>` : ''}
+      `;
+      row.appendChild(details);
+      list.appendChild(row);
+    });
+    box.appendChild(list);
+
+    const btnClose = document.createElement('button');
+    btnClose.type = 'button';
+    btnClose.textContent = 'Fechar';
+    btnClose.style.marginTop = '12px';
+    btnClose.style.padding = '8px 12px';
+    btnClose.style.border = 'none';
+    btnClose.style.borderRadius = '6px';
+    btnClose.style.cursor = 'pointer';
+    btnClose.addEventListener('click', () => modal.remove());
+    box.appendChild(btnClose);
+
+    modal.appendChild(box);
+    document.body.appendChild(modal);
+  }
+
+  // -------------------------
+  // BOTÕES + / - (incremento/decremento) — com integração distribuir_quantidade
+  // -------------------------
+  page.addEventListener('click', ev => {
+    const btn = ev.target.closest('.btn-icon');
+    if (!btn) return;
+
+    ev.preventDefault();
+
+    if (formNova && formNova.contains(btn)) {
+      const produtoVal = selectNovoProduto ? selectNovoProduto.value : '';
+      if (!produtoVal) { alert('Selecione um produto antes de distribuir a quantidade.'); return; }
+
+      const raw = inputNovoQtd ? String(inputNovoQtd.value || '').trim() : '';
+      const quantidade = parseBRNumber(raw);
+      if (isNaN(quantidade) || quantidade <= 0) { alert('Informe uma quantidade válida (> 0) na entrada.'); return; }
+
+      const operacao = (btn.classList.contains('plus') || btn.textContent.trim() === '+') ? 'Adicionar' : 'Subtrair';
+
+      const btns = formNova.querySelectorAll('.btn-icon');
+      btns.forEach(b => b.disabled = true);
+
+      const body = new URLSearchParams();
+      body.append('produto', produtoVal);
+      body.append('valor', String(quantidade));
+      body.append('operacao', operacao);
+      body.append('usuario', '');
+
+      fetch('/calculo_nfs/distribuir_quantidade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString()
-      }).then(res => {
-        if (res.ok) window.location.reload();
-        else res.text().then(t => alert('Falha ao salvar: ' + t));
-      }).catch(() => alert('Erro na requisição ao salvar.'));
+        body: body.toString()
+      }).then(async res => {
+        btns.forEach(b => b.disabled = false);
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          const altered = data && data.quantidade_total_alterada ? data.quantidade_total_alterada : '0';
+          const detalhes = data && data.detalhes ? data.detalhes : [];
+
+          // --- seleciona apenas as linhas que realmente mudaram ---
+          const changed = (detalhes || []).filter(d => {
+            const antes = Number(d.qtd_anterior ?? 0);
+            const depois = Number(d.qtd_nova ?? 0);
+            const alt = Number(d.alterado ?? 0);
+            return alt !== 0 || antes !== depois;
+          });
+
+          // atualiza todos os inputs das linhas que mudaram (mantendo consistência)
+          changed.forEach(d => {
+            const entradaId = String(d.entrada_id);
+            const tr = page.querySelector(`tbody tr[data-entrada-id="${entradaId}"]`);
+            if (!tr) return;
+            const inputQtd = tr.querySelector('input[data-field="quantidade_estoque"]');
+            if (inputQtd) inputQtd.value = formatBR(d.qtd_nova, DECIMALS.quantidade_estoque);
+          });
+
+          // ------ NOVA REGRA: destacar A ÚLTIMA linha alterada ------
+          // escolhe a última alteração (a "última fatia" aplicada)
+          let destaque = null;
+          if (changed.length > 0) {
+            destaque = changed[changed.length - 1]; // último item na ordem retornada pelo backend
+          }
+
+          // remove destaque antigo
+          $$('tbody tr.linha-alterada').forEach(tr => tr.classList.remove('linha-alterada'));
+
+          // monta items para o modal e aplica destaque somente na linha escolhida (a última)
+          const items = (detalhes || []).map(d => {
+            const entradaId = String(d.entrada_id);
+            const tr = page.querySelector(`tbody tr[data-entrada-id="${entradaId}"]`);
+            let nf_display = entradaId;
+            if (tr) {
+              const td_nf = tr.querySelector('.td-nf');
+              if (td_nf) nf_display = td_nf.textContent.trim() || entradaId;
+
+              // se esta for a última linha alterada, aplica a classe e faz scroll
+              if (destaque && String(destaque.entrada_id) === entradaId) {
+                tr.classList.add('linha-alterada');
+                // pequeno delay para garantir que DOM já recebeu o novo valor
+                setTimeout(() => tr.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+              }
+            }
+
+            return {
+              entrada_id: entradaId,
+              cn_id: d.cn_id,
+              alterado: d.alterado,
+              qtd_anterior: d.qtd_anterior,
+              qtd_nova: d.qtd_nova,
+              motivo: d.motivo,
+              nf_display
+            };
+          });
+
+          showResultModal(`${operacao} concluído`, items, altered);
+
+        } else {
+          const txt = await res.text().catch(() => 'Erro desconhecido');
+          alert('Erro ao distribuir quantidade: ' + txt);
+        }
+      }).catch(err => {
+        btns.forEach(b => b.disabled = false);
+        alert('Erro na requisição: ' + err);
+      });
+
+      return;
     }
 
-    // confirmar exclusão individual
-    const delBtn = ev.target.closest('.delete');
-    if (delBtn) {
-      const nome = delBtn.dataset.nome || 'este registro';
-      if (!confirm(`Deseja realmente excluir ${nome}?`)) ev.preventDefault();
+    // comportamento local de incrementar/decrementar um input da linha
+    const container = btn.closest('.form-actions-inline') || btn.closest('.form-row') || btn.closest('tr') || page;
+    if (!container) return;
+    const input = container.querySelector('input.inline-input, input.input-inline, input[data-field]');
+    if (!input || input.disabled) return;
+
+    const rawVal = String(input.value || '').trim();
+    let value = rawVal === '' ? 0 : parseBRNumber(rawVal) || 0;
+    const field = input.dataset.field;
+    const decimals = DECIMALS[field] ?? 0;
+    const step = Math.pow(10, -decimals);
+
+    if (btn.classList.contains('plus') || btn.textContent.trim() === '+') {
+      value += step;
+    } else if (btn.classList.contains('minus') || btn.textContent.trim() === '−' || btn.textContent.trim() === '-') {
+      value = Math.max(0, value - step);
     }
+
+    input.value = formatBR(value, decimals);
+    input.dispatchEvent(new Event('change'));
   });
 
-  // busca
+  // -------------------------
+  // EDIT (toggle apenas - sem salvar/excluir)
+  // -------------------------
+  page.addEventListener('click', ev => {
+    const editBtn = ev.target.closest('.edit-icon, .edit');
+    if (!editBtn) return;
+
+    const tr = editBtn.closest('tr');
+    if (!tr) return;
+
+    const isEditing = tr.classList.toggle('editing'); // toggle state
+    tr.querySelectorAll('.inline-input, .input-inline, input[data-field], select[data-field]').forEach(i => {
+      // habilita/desabilita campos conforme estado de edição
+      i.disabled = !isEditing;
+    });
+
+    // altera o texto do botão para indicar estado — simples e útil
+    editBtn.textContent = isEditing ? 'OK' : '✏️';
+  });
+
+  // -------------------------
+  // BUSCA
+  // -------------------------
   const search = $('#search_nf');
   if (search) {
     search.addEventListener('input', () => {
       const q = search.value.trim().toLowerCase();
       $$('tbody tr').forEach(tr => {
         const tdId = tr.querySelector('.td-id')?.textContent || '';
-        const prodCell = tr.querySelector('.td-produto');
-        const prodTxt = prodCell ? prodCell.textContent.trim().toLowerCase() : '';
-        const nfCell = tr.querySelector('.td-nf');
-        const nfTxt = nfCell ? nfCell.textContent.trim().toLowerCase() : '';
-        const match = tdId.includes(q) || prodTxt.includes(q) || nfTxt.includes(q);
-        tr.style.display = match ? '' : 'none';
+        const prodTxt = tr.querySelector('.td-produto')?.textContent.trim().toLowerCase() || '';
+        const nfTxt = tr.querySelector('.td-nf')?.textContent.trim().toLowerCase() || '';
+        tr.style.display = tdId.includes(q) || prodTxt.includes(q) || nfTxt.includes(q) ? '' : 'none';
       });
     });
   }
 
-  // checkbox select all and delete selected
-  const selectAll = $('#select-all');
-  const deleteForm = $('#form-delete-multiple');
-  const deleteBtn = $('#btn-delete-selected');
-
-  function rowCheckboxes() { return $$('.row-checkbox'); }
-  function updateDeleteBtn() {
-    const checked = rowCheckboxes().filter(cb => cb.checked).length;
-    if (!deleteBtn) return;
-    if (checked > 0) deleteBtn.classList.remove('hidden');
-    else deleteBtn.classList.add('hidden');
-  }
-
-  if (selectAll) {
-    selectAll.addEventListener('change', () => {
-      rowCheckboxes().forEach(cb => cb.checked = selectAll.checked);
-      updateDeleteBtn();
-    });
-  }
-
-  page.addEventListener('change', (ev) => {
-    if (ev.target.matches('.row-checkbox')) {
-      const all = rowCheckboxes();
-      if (selectAll) selectAll.checked = all.length > 0 && all.every(x => x.checked);
-      updateDeleteBtn();
-    }
-  });
-
-  if (deleteForm) {
-    deleteForm.addEventListener('submit', (e) => {
-      const any = rowCheckboxes().some(cb => cb.checked);
-      if (!any) { alert('Selecione ao menos um registro para excluir.'); e.preventDefault(); return; }
-      if (!confirm('Deseja realmente excluir os registros selecionados?')) e.preventDefault();
-    });
-  }
-
-  // formatting helpers
+  // -------------------------
+  // Helpers de formatação e paste
+  // -------------------------
   function formatInputValueForDisplay(raw, decimals) {
     if (raw === null || raw === undefined || raw === '') return '';
-    // raw is number or string. Convert to float and format accordingly
     const n = Number(String(raw).replace(',', '.').replace(/\s/g, ''));
     if (isNaN(n)) return raw;
-    // ensure fixed decimals
     const fixed = n.toFixed(decimals);
-    // insert thousand separators and use comma decimal
     const parts = fixed.split('.');
     let intPart = parts[0];
     const decPart = parts[1] || '';
-    // thousand separator
     intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return intPart + ',' + decPart;
   }
 
-  // format on blur according to DECIMALS map
-  page.addEventListener('blur', (ev) => {
+  page.addEventListener('blur', ev => {
     const el = ev.target;
-    if (!el.matches('.inline-input')) return;
+    if (!el.matches('.inline-input, .input-inline, input[data-field]')) return;
     const field = el.dataset.field;
     if (!field) return;
     if (el.tagName.toLowerCase() === 'select') return;
     const decimals = DECIMALS[field] ?? 2;
-    let val = el.value.trim();
+    let val = (el.value || '').trim();
     if (val === '') { el.value = ''; return; }
-    // normalize then format for display
-    val = val.replace(/\./g, '').replace(',', '.');
+    val = val.replace(/\./g,'').replace(',', '.');
     const n = Number(val);
-    if (isNaN(n)) { /* keep original */ return; }
+    if (isNaN(n)) return;
     el.value = formatInputValueForDisplay(n, decimals);
   }, true);
 
-  // prevent paste non-numeric into numeric fields
-  page.addEventListener('paste', (ev) => {
+  page.addEventListener('paste', ev => {
     const el = ev.target;
-    if (!el.matches('.inline-input')) return;
+    if (!el.matches('.inline-input, .input-inline, input[data-field]')) return;
     if (el.tagName.toLowerCase() === 'select') return;
     const text = (ev.clipboardData || window.clipboardData).getData('text');
-    // allow digits, dots, commas
     if (!/^[\d\.,\s\-]+$/.test(text)) ev.preventDefault();
   });
 
-  // auto-hide flashes if any
   $$('.flash').forEach(node => {
     setTimeout(() => {
       node.style.transition = 'opacity .45s';
@@ -187,4 +334,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 3000);
   });
 
+  if (formNova) {
+    formNova.addEventListener('submit', ev => {
+      const sel = formNova.querySelector('select[name="id_produto"], #novo_produto');
+      if (sel && !sel.value) {
+        alert('Selecione um produto antes de adicionar.');
+        ev.preventDefault();
+      }
+    });
+  }
 });

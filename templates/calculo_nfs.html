@@ -23,11 +23,6 @@
           <div class="search-container">
             <input id="search_nf" type="text" placeholder="🔍 Pesquisar por produto ou id..." />
           </div>
-
-          <!-- mantive o form de exclusão múltipla caso queira reativar depois -->
-          <form id="form-delete-multiple" action="{{ url_for('calculo_nfs.excluir_selecionados_calculo') }}" method="post">
-            <button id="btn-delete-selected" class="btn-delete-selected hidden" type="submit">🗑️ Excluir Selecionados</button>
-          </form>
         </div>
 
         <!-- Formulário de adição -->
@@ -38,20 +33,24 @@
               <select id="novo_produto" name="id_produto" required>
                 <option value="">-- selecione --</option>
                 {% for p in produtos %}
-                  <option value="{{ p.id }}">{{ p.nome }}</option>
+                  <option value="{{ p.nome }}">{{ p.nome }}</option>
                 {% endfor %}
               </select>
             </div>
+
             <div class="form-group">
               <label for="novo_qtd">Quantidade (estoque)</label>
-              <input id="novo_qtd" name="quantidade_estoque" type="text" placeholder="0,000">
+              <input id="novo_qtd" name="quantidade_estoque" type="text" class="input-inline" placeholder="0,000" data-field="quantidade_estoque">
+            </div>
+
+            <div class="form-actions-inline" aria-hidden="false">
+              <button type="button" class="btn-icon plus" title="Adicionar quantidade">+</button>
+              <button type="button" class="btn-icon minus" title="Subtrair quantidade">−</button>
+              <button type="button" id="btn-history" class="btn-secondary" title="Histórico de cálculo">Histórico de cálculo</button>
+              <button type="button" id="btn-export" class="btn-secondary" title="Exportar Excel">Exportar Excel</button>
             </div>
           </div>
-          <div class="form-row form-row-submit">
-            <button class="btn-primary" type="submit">Adicionar</button>
-          </div>
         </form>
-
       </div>
     </section>
 
@@ -62,7 +61,7 @@
       </div>
 
       <div class="card-body">
-                <div class="table-container">
+        <div class="table-container">
           <table>
             <thead>
               <tr>
@@ -83,15 +82,19 @@
             </thead>
             <tbody>
               {% for e in estoques %}
-              <tr data-id="{{ e.id or '' }}">
+              <tr data-id="{{ e.id or '' }}" data-entrada-id="{{ e.entrada_id or '' }}">
                 <!-- Data da entrada_nf (formatada) -->
                 <td>{{ e.data or '' }}</td>
 
                 <!-- NF (vinda de entrada_nf) -->
-                <td>{{ e.nf or '' }}</td>
+                <td class="td-nf">{{ e.nf or '' }}</td>
 
-                <!-- Produto: texto simples (removi o select inline) -->
-                <td class="td-produto">{{ e.produto or '' }}</td>
+                <!-- Produto: texto simples (removi o select inline)
+                     adicionei um span escondido com .td-id para a busca por id -->
+                <td class="td-produto">
+                  {{ e.produto or '' }}
+                  <span class="td-id" style="display:none" aria-hidden="true">{{ e.id or '' }}</span>
+                </td>
 
                 <!-- Peso líquido (vindo de entrada_nf) -->
                 <td><input class="input-inline" data-field="peso_liquido" value="{{ ('%.3f'|format(e.peso_liquido or 0)).replace('.', ',') }}" disabled></td>
@@ -106,13 +109,8 @@
                 <td><input class="input-inline" data-field="custo_total" value="{{ ('%.2f'|format(e.custo_total or 0)).replace('.', ',') }}" disabled></td>
 
                 <td class="col-actions">
-                  <button class="icon edit-icon" title="Editar">✏️</button>
-                  <button class="icon save-icon hidden" title="Salvar">💾</button>
-                  {% if e.id %}
-                    <form class="inline-delete" action="{{ url_for('calculo_nfs.excluir_registro_calculo', registro_id=e.id) }}" method="post">
-                      <button class="icon delete-icon" data-nome="{{ e.id }}" title="Excluir">🗑️</button>
-                    </form>
-                  {% endif %}
+                  <button type="button" class="icon edit-icon" title="Editar">✏️</button>
+                  <button type="button" class="icon save-icon hidden" title="Salvar">💾</button>
                 </td>
               </tr>
               {% else %}

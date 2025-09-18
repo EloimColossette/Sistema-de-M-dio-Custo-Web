@@ -1,6 +1,5 @@
 /* ===========================================
-   ESTILO EXCLUSIVO PARA CÁLCULO DE NFs
-   (Baseado no layout de materiais.css)
+   ESTILO EXCLUSIVO PARA CÁLCULO DE NFs (COM FUNDO BRANCO)
    =========================================== */
 
 /* Tipografia + Reset simples */
@@ -11,28 +10,44 @@
   font-family: 'Inter', sans-serif;
 }
 
+:root {
+  /* valor padrão; o JS pode sobrescrever com ajuste fino */
+  --card-overlap: 12px;
+  --card-add-padding-vertical: 12px;
+  --input-height: 36px;
+}
+
+/* =========================
+   Corpo e background = branco
+   ========================= */
 html, body {
   height: 100%;
   overflow: hidden;
-  background-color: #f0f2f5;
+  background-color: #ffffff; /* ← fundo branco de toda a janela */
   color: #333;
 }
 
-/* Container principal */
+/* garante que o container principal também tenha fundo branco */
 #calc-nfs-page {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  background-color: #ffffff; /* reforça fundo branco no container */
 }
 
-/* CARD “Adicionar Novo” */
+/* =========================
+   CARD “Adicionar Novo”
+   ========================= */
 .card-add {
   background-color: #fff;
   border-radius: 2px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  overflow: hidden;
+  overflow: visible; /* permitir pequeno overlap do próximo card */
+  position: relative;
+  z-index: 3; /* garante que controles fiquem acima do card-list */
 }
 
+/* Header do card-add (mantive o gradiente; remova se quiser branco também) */
 .card-add .card-header {
   background: linear-gradient(180deg, #000000 0%, #4a4a4a 50%, #667eea 100%);
   padding: 16px 24px;
@@ -61,19 +76,19 @@ html, body {
   padding: 6px 10px;
   cursor: pointer;
 }
-.btn-back-dashboard:hover {
-  text-decoration: underline;
-}
+.btn-back-dashboard:hover { text-decoration: underline; }
 
-/* Interno do card-add */
+/* Interno do card-add - reduz padding inferior para "subir" o próximo card */
 .card-add .card-body {
-  padding: 12px 16px;
+  padding: var(--card-add-padding-vertical) 16px 8px 16px;
 }
 
+/* Grid do form */
 .card-add .card-body form {
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-gap: 8px 12px;
+  align-items: end; /* alinhar inputs e botões ao final */
 }
 
 /* FORM ROWS */
@@ -81,6 +96,7 @@ html, body {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
+  align-items: flex-end;
 }
 
 .form-group {
@@ -96,8 +112,10 @@ html, body {
   font-size: 0.9rem;
 }
 
+/* altura dos inputs/seletores */
 .form-group input[type="text"],
 .form-group select {
+  height: var(--input-height);
   padding: 6px 8px;
   border: 1px solid #ccc;
   border-radius: 4px;
@@ -105,12 +123,8 @@ html, body {
   line-height: 1.2;
   transition: border-color 0.2s;
 }
-
 .form-group input[type="text"]:focus,
-.form-group select:focus {
-  outline: none;
-  border-color: #007bff;
-}
+.form-group select:focus { outline: none; border-color: #007bff; }
 
 /* Botões do form */
 .form-row.form-row-submit {
@@ -122,12 +136,11 @@ html, body {
   margin-top: 8px;
 }
 
-/* Botões */
+/* Botões padrão */
 .btn-primary, .btn-secondary {
   padding: 6px 12px;
   font-size: 0.9rem;
 }
-
 .btn-primary {
   background-color: #007bff;
   color: #fff;
@@ -138,9 +151,7 @@ html, body {
   font-size: 0.95rem;
   transition: background-color 0.2s;
 }
-.btn-primary:hover {
-  background-color: #0056b3;
-}
+.btn-primary:hover { background-color: #0056b3; }
 
 .btn-secondary {
   background-color: #6c757d;
@@ -151,9 +162,7 @@ html, body {
   font-size: 0.95rem;
   transition: background-color 0.2s;
 }
-.btn-secondary:hover {
-  background-color: #5a6268;
-}
+.btn-secondary:hover { background-color: #5a6268; }
 
 .btn-delete-selected {
   position: absolute;
@@ -169,34 +178,42 @@ html, body {
   font-size: 0.95rem;
   transition: background-color 0.2s;
 }
-.btn-delete-selected:hover {
-  background-color: #c82333;
-}
+.btn-delete-selected:hover { background-color: #c82333; }
 
-/* CARD LIST */
+/* =========================
+   CARD LIST (Tabela)
+   ========================= */
 .card-list {
   border-radius: 0 0 8px 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
   overflow: hidden;
-  flex: 1; 
+  flex: 1;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 160px); 
+  margin-top: calc(-1 * var(--card-overlap));
+  padding-top: calc(var(--card-overlap) + 8px);
+  height: calc(100vh - 120px);
+  min-height: 420px;
+  position: relative;
+  z-index: 1;
 }
 
+/* header do card-list */
 .card-list .card-header {
   display: flex;
-  background-color: #fff;
+  background-color: #fff; /* cabeçalho branco */
   padding: 8px 16px;
   justify-content: space-between;
   position: relative;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
+  z-index: 2;
 }
 .card-list .card-header h2 {
   text-align: center;
   font-size: 1.25rem;
   margin: 0;
+  color: #222;
 }
 
 /* Interno do card-list */
@@ -206,12 +223,13 @@ html, body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  min-height: 350px; 
+  min-height: 360px;
+  padding-top: 6px;
 }
 
 /* Barra de pesquisa */
 .search-container {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 .search-container input {
   width: 100%;
@@ -221,21 +239,22 @@ html, body {
   border-radius: 4px;
   transition: border-color 0.2s;
 }
-.search-container input:focus {
-  outline: none;
-  border-color: #007bff;
-}
+.search-container input:focus { outline: none; border-color: #007bff; }
 
-/* Tabela */
+/* Tabela (container com scroll) */
 .table-container {
-  margin: 0; 
+  margin: 0;
   flex: 1;
   overflow-y: auto;
   overflow-x: auto;
   border: 1px solid #e0e0e0;
   border-radius: 4px;
+  background: #fff;
+  padding-right: 6px;
+  box-sizing: border-box;
 }
 
+/* Tabela em si */
 table {
   width: 100%;
   border-collapse: collapse;
@@ -258,29 +277,14 @@ table td {
   font-size: 0.95rem;
 }
 
-table th {
-  color: #333;
-  text-align: left;
-}
+table th { color: #333; text-align: left; }
 
-table tr:nth-child(even) {
-  background-color: #fbfbfb;
-}
+table tr:nth-child(even) { background-color: #fbfbfb; }
+table tr:hover { background-color: #f1f3f5; }
 
-table tr:hover {
-  background-color: #f1f3f5;
-}
+table .col-actions { width: 140px; text-align: center; }
 
-table .col-actions {
-  width: 140px;
-  text-align: center;
-}
-
-table .no-data {
-  text-align: center;
-  color: #777;
-  padding: 24px;
-}
+table .no-data { text-align: center; color: #777; padding: 24px; }
 
 /* Inputs inline */
 .input-inline {
@@ -291,19 +295,9 @@ table .no-data {
   border-radius: 4px;
   transition: border-color 0.2s;
 }
-.input-inline:disabled {
-  background-color: transparent;
-  border-color: transparent;
-  color: #333;
-  cursor: default;
-}
-.input-inline:not(:disabled) {
-  background-color: #fff;
-}
-.input-inline:focus {
-  outline: none;
-  border-color: #007bff;
-}
+.input-inline:disabled { background-color: transparent; border-color: transparent; color: #333; cursor: default; }
+.input-inline:not(:disabled) { background-color: #fff; }
+.input-inline:focus { outline: none; border-color: #007bff; }
 
 /* Ícones */
 .icon {
@@ -314,9 +308,7 @@ table .no-data {
   background: transparent;
   border: none;
 }
-.icon:hover {
-  transform: scale(1.1);
-}
+.icon:hover { transform: scale(1.1); }
 .edit-icon { color: #007bff; }
 .save-icon { color: #28a745; }
 .delete-icon { color: #dc3545; }
@@ -324,68 +316,144 @@ table .no-data {
 
 /* Responsividade */
 @media (max-width: 600px) {
-  .form-row.horizontal { flex-direction: column; }
+  .form-row.horizontal { flex-direction: column; align-items: stretch; }
   .form-group label { margin-bottom: 4px; }
   table th, table td { padding: 10px 12px; }
   .icon { margin: 0 4px; font-size: 1rem; }
 }
 
 /* Flash messages */
-.flash-messages { margin-bottom: 16px; }
+.flash-messages { margin-bottom: 8px; }
 .flash {
   padding: 10px 14px;
   margin-bottom: 8px;
   border-radius: 4px;
   font-size: 0.95rem;
 }
-.flash.sucesso {
-  background-color: #e6ffed;
-  border-left: 4px solid #28a745;
-  color: #155724;
-}
-.flash.erro {
-  background-color: #ffe6e6;
-  border-left: 4px solid #dc3545;
-  color: #721c24;
-}
-.flash.info {
-  background-color: #e6f0ff;
-  border-left: 4px solid #007bff;
-  color: #004085;
-}
-/* ======= pequenas adições: pesquisa abaixo do cabeçalho + scroll horizontal ====== */
+.flash.sucesso { background-color: #e6ffed; border-left: 4px solid #28a745; color: #155724; }
+.flash.erro { background-color: #ffe6e6; border-left: 4px solid #dc3545; color: #721c24; }
+.flash.info { background-color: #e6f0ff; border-left: 4px solid #007bff; color: #004085; }
+
+/* layout page-controls */
 .page-controls {
   display: flex;
   gap: 12px;
   align-items: center;
   width: 100%;
-  margin: 12px 0; /* espaçamento entre o cabeçalho e o card-list */
+  margin: 8px 0;
 }
-
 .page-controls .search-container { flex: 1; }
-.page-controls .search-container input {
-  width: 100%;
-  padding: 10px 12px;
-  font-size: 0.95rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-}
-.page-controls .search-container input:focus { border-color: #007bff; }
 
-/* Forçar rolagem horizontal quando necessário (sem alterar outros estilos) */
-.table-container {
-  overflow-x: auto;   /* habilita barra horizontal quando tabela for maior que o container */
-  -webkit-overflow-scrolling: touch;
-}
-
-/* evita quebra de linha nas células (ajuda a criar a barra horizontal) */
+/* evita quebra de linha nas células */
 .table-container table,
 .table-container table th,
 .table-container table td {
   white-space: nowrap;
 }
+.table-container table { min-width: 1200px; }
 
-/* largura mínima para a tabela (ajuste se precisar mais/menos) */
-.table-container table {
-  min-width: 1200px;
+/* =======================
+   BOTÕES AO LADO DO CAMPO QUANTIDADE
+   ======================= */
+.form-actions-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-left: 8px;
+  margin-left: auto;
+}
+
+/* botão quadrado (mais/menos) */
+.btn-icon {
+  width: 46px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  border: 2px solid #dc3545;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+.btn-icon:hover { transform: scale(1.04); }
+
+/* histórico/exportar (botões secundários compactos) */
+.form-actions-inline .btn-secondary { padding: 6px 10px; font-size: 0.9rem; }
+
+/* responsividade para o bloco de botões */
+@media (max-width: 860px) {
+  .form-actions-inline { gap: 6px; align-items: center; }
+  .form-actions-inline .btn-icon { width: 40px; height: 32px; }
+  .form-row.horizontal { flex-wrap: wrap; }
+}
+
+/* =========================
+   REMOÇÕES / CORREÇÕES DE LINHAS E FOCOS
+   ========================= */
+
+/* remove outline/box-shadow padrão para elementos com foco nessa área */
+.card-list :focus,
+.card-add :focus,
+.card-list .card-header :focus,
+.card-add .card-body :focus,
+input:focus,
+textarea:focus,
+select:focus,
+button:focus,
+a:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* força cabeçalho do card-list e table-container com fundo branco e sem borda */
+.card-list .card-header,
+.table-container {
+  background: #fff !important;
+  border-top: none !important;
+  box-shadow: none !important;
+}
+
+/* remove bordas visíveis entre cards (se houver) */
+.card-list,
+.card-list .card-header,
+.card-add {
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-color: transparent !important;
+}
+
+/* neutraliza pseudo-elementos que possam desenhar linhas (before/after) */
+.card-list::before,
+.card-list::after,
+.card-add::before,
+.card-add::after,
+.card-list .card-header::before,
+.card-list .card-header::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* esconde qualquer <hr> residual no layout */
+#calc-nfs-page hr,
+.card-list hr,
+.card-add hr {
+  display: none !important;
+}
+
+/* corrige autofill do Chrome (mantém fundo branco visual) */
+input:-webkit-autofill,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0px 1000px #fff inset !important;
+  box-shadow: 0 0 0px 1000px #fff inset !important;
+  -webkit-text-fill-color: #000 !important;
+}
+
+.linha-alterada {
+  background-color: #ffff99 !important;
+  transition: background-color 0.3s;
 }

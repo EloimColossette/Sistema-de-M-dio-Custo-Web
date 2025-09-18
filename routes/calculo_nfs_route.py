@@ -1,4 +1,3 @@
-# routes/calculo_routes.py
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, send_file
 from routes.auth_routes import login_required
 from conexao_db import conectar
@@ -9,17 +8,12 @@ import pandas as pd
 calculo_bp = Blueprint('calculo_nfs', __name__, url_prefix='/calculo_nfs')
 
 def converter_numero_br_para_decimal(valor):
-    """
-    Converte string no formato brasileiro (ex.: "1.234,56" ou "1234.56")
-    para Decimal. Retorna None se vazio ou inválido.
-    """
     if valor is None:
         return None
     s = str(valor).strip()
     if s == '':
         return None
     s = s.replace(' ', '')
-    # Remove separador de milhares e padroniza decimal com ponto
     if ',' in s and s.count(',') == 1 and '.' in s:
         s = s.replace('.', '').replace(',', '.')
     else:
@@ -31,8 +25,8 @@ def converter_numero_br_para_decimal(valor):
 
 def registrar_historico(usuario, nf, produto, quantidade, tipo):
     """
-    Grava uma linha em uma tabela de histórico (se existir).
-    Ajuste a tabela/nome dos campos conforme seu schema.
+    Tenta gravar histórico, mas silencia erro quando a tabela calculo_historico não existe
+    (útil durante testes). Outros erros serão logados.
     """
     conn = conectar()
     cur = conn.cursor()
@@ -43,7 +37,6 @@ def registrar_historico(usuario, nf, produto, quantidade, tipo):
             (usuario or '', str(nf), str(produto), Decimal(str(quantidade)), tipo)
         )
         conn.commit()
-        # opcional: notify
         try:
             cur.execute("SELECT pg_notify('historico_atualizado', 'novo');")
             conn.commit()
@@ -51,40 +44,84 @@ def registrar_historico(usuario, nf, produto, quantidade, tipo):
             pass
     except Exception as e:
         conn.rollback()
-        print("Erro ao gravar histórico:", e)
+        # se a tabela não existir, suprimir o erro para não atrapalhar testes
+        msg = str(e).lower()
+        if 'calculo_historico' in msg or 'relation "calculo_historico" does not exist' in msg:
+            # silenciar (opcionalmente logar em debug)
+            # print("Tabela calculo_historico não existe — histórico ignorado durante testes.")
+            pass
+        else:
+            print("Erro ao gravar histórico:", e)
     finally:
         cur.close()
         conn.close()
 
-# -------------------------
-# Página / listagem (listar_calculo_nfs)
-# -------------------------
-@calculo_bp.route('/', methods=['GET'])
-@login_required
-def listar_calculo_nfs():
+def sincronizar_estoque_por_entrada():
     """
-    Lista todas as linhas da tabela entrada_nf (uma linha por entrada),
-    trazendo também dados de produtos / calculo_nfs quando houver correspondência.
+    Cada linha da entrada_nf vira uma linha em calculo_nfs com a mesma quantidade do peso_liquido.
+    NÃO sobrescreve quantidade_estoque já existente — apenas insere novas linhas ou preenche NULL.
     """
     conn = conectar()
     cur = conn.cursor()
     try:
         cur.execute("""
+            SELECT en.id AS entrada_id, en.peso_liquido
+            FROM entrada_nf en
+            WHERE en.peso_liquido IS NOT NULL
+        """)
+        rows = cur.fetchall()
+
+        for entrada_id, peso in rows:
+            if peso is None:
+                continue
+            peso_dec = Decimal(str(peso))
+
+            # Insere se não existir; se existir, atualiza apenas se quantidade_estoque IS NULL
+            cur.execute("""
+                INSERT INTO calculo_nfs (entrada_id, quantidade_estoque)
+                VALUES (%s, %s)
+                ON CONFLICT (entrada_id) DO UPDATE
+                SET quantidade_estoque = CASE
+                    WHEN calculo_nfs.quantidade_estoque IS NULL THEN EXCLUDED.quantidade_estoque
+                    ELSE calculo_nfs.quantidade_estoque
+                END
+            """, (entrada_id, peso_dec))
+
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print("Erro sincronizar_estoque_por_entrada:", e)
+    finally:
+        cur.close()
+        conn.close()
+
+
+@calculo_bp.route('/', methods=['GET'])
+@login_required
+def listar_calculo_nfs():
+    try:
+        sincronizar_estoque_por_entrada()
+    except Exception as e:
+        print("Aviso: falha na sincronização automática de estoque:", e)
+
+    conn = conectar()
+    cur = conn.cursor()
+    try:
+        # Dados do estoque
+        cur.execute("""
             SELECT
-                en.id                 AS entrada_id,     -- 0
-                en.data               AS entrada_data,   -- 1
-                en.nf                 AS entrada_nf,     -- 2
-                en.produto            AS entrada_produto,-- 3
-                en.peso_liquido       AS peso_liquido,   -- 4
-                p.id                  AS produto_id,     -- 5 (pode ser NULL)
-                cn.id                 AS calculo_id,     -- 6 (pode ser NULL)
-                COALESCE(cn.quantidade_estoque, 0) AS quantidade_estoque, -- 7
+                en.id AS entrada_id,
+                en.data AS entrada_data,
+                en.nf AS entrada_nf,
+                en.produto AS entrada_produto,
+                en.peso_liquido AS peso_liquido,
+                cn.id AS calculo_id,
+                COALESCE(cn.quantidade_estoque, 0) AS quantidade_estoque,
                 cn.qtd_cobre, cn.qtd_zinco,
                 cn.valor_total_nf, cn.mao_de_obra, cn.materia_prima,
                 cn.custo_total_manual, cn.custo_total
             FROM entrada_nf en
-            LEFT JOIN produtos p ON LOWER(p.nome) = LOWER(en.produto)
-            LEFT JOIN calculo_nfs cn ON p.id = cn.id_produto
+            LEFT JOIN calculo_nfs cn ON cn.entrada_id = en.id
             ORDER BY en.data DESC NULLS LAST, en.id DESC
         """)
         rows = cur.fetchall()
@@ -97,60 +134,50 @@ def listar_calculo_nfs():
                 'nf': r[2],
                 'produto': r[3],
                 'peso_liquido': r[4],
-                'id_produto': r[5],
-                # 'id' aqui continua sendo o id do calculo_nfs (se existir) — usado para ações
-                'id': r[6],
-                'quantidade_estoque': r[7],
-                'qtd_cobre': r[8],
-                'qtd_zinco': r[9],
-                'valor_total_nf': r[10],
-                'mao_de_obra': r[11],
-                'materia_prima': r[12],
-                'custo_total_manual': r[13],
-                'custo_total': r[14],
+                'id': r[5],
+                'quantidade_estoque': r[6],
+                'qtd_cobre': r[7],
+                'qtd_zinco': r[8],
+                'valor_total_nf': r[9],
+                'mao_de_obra': r[10],
+                'materia_prima': r[11],
+                'custo_total_manual': r[12],
+                'custo_total': r[13],
             })
 
-        # lista de produtos para o select do formulário (mantive como antes)
-        cur.execute("SELECT id, nome FROM produtos ORDER BY LOWER(nome) ASC")
-        produtos = [dict(id=p[0], nome=p[1]) for p in cur.fetchall()]
-
-        # substituir o bloco que formata datas por este
+        # Formata datas
         for reg in registros:
             d = reg.get('data')
-            if d is not None:
+            if d:
                 try:
-                    # se for datetime
                     if hasattr(d, 'strftime'):
                         reg['data'] = d.strftime('%d/%m/%Y')
                     else:
-                        s = str(d).strip()
-                        # extrai só a parte de data se vier junto com hora (ex: '2025-09-12 14:22:33' ou '2025-09-12T14:22:33')
-                        if 'T' in s:
-                            s = s.split('T')[0]
-                        else:
-                            s = s.split()[0]
+                        s = str(d).split('T')[0].split()[0]
                         parts = s.split('-')
                         if len(parts) == 3:
-                            # transforma YYYY-MM-DD -> DD/MM/YYYY
                             reg['data'] = f"{parts[2]}/{parts[1]}/{parts[0]}"
                         else:
-                            # fallback: deixa o que vier (sem hora, se possível)
                             reg['data'] = s
                 except Exception:
-                    # qualquer erro, pelo menos tenta deixar sem hora
                     reg['data'] = str(d).split()[0]
             else:
                 reg['data'] = None
+
+        # Lista de produtos para dropdown: pega somente produtos únicos da entrada_nf
+        cur.execute("""
+            SELECT DISTINCT ON (produto) id, produto
+            FROM entrada_nf
+            ORDER BY produto ASC
+        """)
+        produtos_dropdown = [{'id': row[0], 'nome': row[1]} for row in cur.fetchall()]
 
     finally:
         cur.close()
         conn.close()
 
-    return render_template('calculo_nfs.html', estoques=registros, produtos=produtos)
+    return render_template('calculo_nfs.html', estoques=registros, produtos=produtos_dropdown)
 
-# -------------------------
-# Criar registro (criar_registro_calculo)
-# -------------------------
 @calculo_bp.route('/create', methods=['POST'])
 @login_required
 def criar_registro_calculo():
@@ -183,9 +210,6 @@ def criar_registro_calculo():
 
     return redirect(url_for('calculo_nfs.listar_calculo_nfs'))
 
-# -------------------------
-# Editar registro (editar_registro_calculo) - usado pelo JS via fetch
-# -------------------------
 @calculo_bp.route('/edit/<int:registro_id>', methods=['POST'])
 @login_required
 def editar_registro_calculo(registro_id):
@@ -248,59 +272,8 @@ def editar_registro_calculo(registro_id):
         cur.close()
         conn.close()
 
-# -------------------------
-# Excluir individual (excluir_registro_calculo)
-# -------------------------
-@calculo_bp.route('/delete/<int:registro_id>', methods=['POST'])
-@login_required
-def excluir_registro_calculo(registro_id):
-    conn = conectar()
-    cur = conn.cursor()
-    try:
-        cur.execute("DELETE FROM calculo_nfs WHERE id = %s", (registro_id,))
-        conn.commit()
-        flash('Registro excluído.', 'sucesso')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Erro ao excluir: {e}', 'erro')
-    finally:
-        cur.close()
-        conn.close()
-    return redirect(url_for('calculo_nfs.listar_calculo_nfs'))
 
-# -------------------------
-# Excluir selecionados (excluir_selecionados_calculo)
-# -------------------------
-@calculo_bp.route('/delete_selecionados', methods=['POST'])
-@login_required
-def excluir_selecionados_calculo():
-    ids = request.form.getlist('estoque_ids')
-    if not ids:
-        flash('Nenhum registro selecionado.', 'erro')
-        return redirect(url_for('calculo_nfs.listar_calculo_nfs'))
-    try:
-        ids_int = tuple(map(int, ids))
-    except Exception:
-        flash('IDs inválidos.', 'erro')
-        return redirect(url_for('calculo_nfs.listar_calculo_nfs'))
-    conn = conectar()
-    cur = conn.cursor()
-    try:
-        sql = f"DELETE FROM calculo_nfs WHERE id IN ({','.join(['%s']*len(ids_int))})"
-        cur.execute(sql, ids_int)
-        conn.commit()
-        flash(f'{cur.rowcount} registro(s) excluído(s).', 'sucesso')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Erro ao excluir registros: {e}', 'erro')
-    finally:
-        cur.close()
-        conn.close()
-    return redirect(url_for('calculo_nfs.listar_calculo_nfs'))
 
-# -------------------------
-# Atualizar custo manual (atualizar_custo_manual)
-# -------------------------
 @calculo_bp.route('/update_custo_manual', methods=['POST'])
 @login_required
 def atualizar_custo_manual():
@@ -327,21 +300,10 @@ def atualizar_custo_manual():
         cur.close()
         conn.close()
 
-# -------------------------
-# Distribuir quantidade (adicionar/subtrair) (distribuir_quantidade)
-# -------------------------
 @calculo_bp.route('/distribuir_quantidade', methods=['POST'])
 @login_required
 def distribuir_quantidade():
-    """
-    Versão simplificada: ajusta a quantidade no registro calculo_nfs correspondente ao produto.
-    Recebe:
-      - produto: pode ser ID (string numérica) ou nome do produto
-      - valor: quantidade a adicionar/subtrair (formato BR ou pt)
-      - operacao: 'Adicionar' ou 'Subtrair'
-      - usuario: opcional (para histórico)
-    """
-    produto = request.form.get('produto')
+    produto = request.form.get('produto')          # pode ser nome do produto ou id da entrada
     valor_raw = request.form.get('valor')
     operacao = request.form.get('operacao')
     usuario = request.form.get('usuario') or ''
@@ -350,70 +312,122 @@ def distribuir_quantidade():
         return ('Parâmetros inválidos', 400)
 
     valor = converter_numero_br_para_decimal(valor_raw)
-    if valor is None:
+    if valor is None or valor <= 0:
         return ('Valor inválido', 400)
 
     conn = conectar()
     cur = conn.cursor()
     try:
-        # tenta interpretar produto como ID, senão busca por nome
-        id_produto = None
+        # DEBUG: remover em produção se quiser
+        print("distribuir_quantidade: produto param recebido ->", repr(produto), "valor ->", valor, "operacao ->", operacao)
+
+        # Decide se 'produto' é um id de entrada (entrada_nf.id) ou um nome
+        filtro_por_entrada_id = False
+        entrada_id_val = None
         try:
-            id_produto = int(produto)
-            cur.execute("SELECT id, nome FROM produtos WHERE id = %s", (id_produto,))
-            prod_row = cur.fetchone()
+            entrada_id_val = int(produto)
+            filtro_por_entrada_id = True
         except Exception:
-            cur.execute("SELECT id, nome FROM produtos WHERE LOWER(nome) = LOWER(%s) LIMIT 1", (produto,))
-            prod_row = cur.fetchone()
+            filtro_por_entrada_id = False
 
-        if not prod_row:
-            return ('Produto não encontrado', 404)
-
-        id_produto = prod_row[0]
-        nome_produto = prod_row[1]
-
-        # busca registro em calculo_nfs
-        cur.execute("SELECT id, quantidade_estoque FROM calculo_nfs WHERE id_produto = %s", (id_produto,))
-        row = cur.fetchone()
-
-        if row:
-            registro_id, qtd_atual = row[0], Decimal(row[1] or 0)
-        else:
-            registro_id, qtd_atual = None, Decimal('0')
-
+        # Busca registros de calculo_nfs juntando com entrada_nf dependendo do filtro
         if operacao == 'Subtrair':
-            if valor > qtd_atual:
-                return (f'Quantidade a subtrair ({valor}) maior que disponível ({qtd_atual})', 400)
-            nova_qtd = qtd_atual - valor
+            if filtro_por_entrada_id:
+                cur.execute("""
+                    SELECT cn.id, cn.quantidade_estoque, en.peso_liquido, en.id AS entrada_id, en.produto
+                    FROM calculo_nfs cn
+                    JOIN entrada_nf en ON cn.entrada_id = en.id
+                    WHERE en.id = %s
+                    ORDER BY en.data ASC NULLS LAST, en.id ASC
+                """, (entrada_id_val,))
+            else:
+                # busca por nome do produto (case-insensitive)
+                cur.execute("""
+                    SELECT cn.id, cn.quantidade_estoque, en.peso_liquido, en.id AS entrada_id, en.produto
+                    FROM calculo_nfs cn
+                    JOIN entrada_nf en ON cn.entrada_id = en.id
+                    WHERE LOWER(en.produto) = LOWER(%s)
+                    ORDER BY en.data ASC NULLS LAST, en.id ASC
+                """, (produto,))
         else:  # Adicionar
-            nova_qtd = qtd_atual + valor
+            if filtro_por_entrada_id:
+                cur.execute("""
+                    SELECT cn.id, cn.quantidade_estoque, en.peso_liquido, en.id AS entrada_id, en.produto
+                    FROM calculo_nfs cn
+                    JOIN entrada_nf en ON cn.entrada_id = en.id
+                    WHERE en.id = %s
+                    ORDER BY en.data DESC NULLS LAST, en.id DESC
+                """, (entrada_id_val,))
+            else:
+                cur.execute("""
+                    SELECT cn.id, cn.quantidade_estoque, en.peso_liquido, en.id AS entrada_id, en.produto
+                    FROM calculo_nfs cn
+                    JOIN entrada_nf en ON cn.entrada_id = en.id
+                    WHERE LOWER(en.produto) = LOWER(%s)
+                    ORDER BY en.data DESC NULLS LAST, en.id DESC
+                """, (produto,))
 
-        if registro_id:
-            cur.execute("UPDATE calculo_nfs SET quantidade_estoque = %s WHERE id = %s", (nova_qtd, registro_id))
-        else:
-            cur.execute("INSERT INTO calculo_nfs (id_produto, quantidade_estoque) VALUES (%s, %s) RETURNING id", (id_produto, nova_qtd))
-            registro_id = cur.fetchone()[0]
+        registros = cur.fetchall()
+        if not registros:
+            return ('Nenhum registro encontrado para esse produto/entrada', 404)
 
-        # registra historico
-        tipo = 'adicionar' if operacao == 'Adicionar' else 'subtrair'
-        quantidade_trocada = (nova_qtd - qtd_atual) if operacao == 'Adicionar' else (qtd_atual - nova_qtd)
-        if quantidade_trocada != 0:
-            registrar_historico(usuario, None, nome_produto or id_produto, quantidade_trocada, tipo)
+        valor_restante = Decimal(str(valor))
+        total_alterado = Decimal('0')
+        detalhes = []
+
+        for r in registros:
+            cn_id = r[0]
+            qtd_atual = Decimal(r[1] or 0)
+            peso_liq = Decimal(r[2] or 0)
+            entrada_id = r[3]
+            nome_from_entry = r[4]  # produto conforme entrada_nf
+
+            if operacao == 'Subtrair':
+                if valor_restante <= 0:
+                    break
+                dec = min(valor_restante, qtd_atual)
+                if dec <= 0:
+                    continue
+                nova_qtd = qtd_atual - dec
+                cur.execute("UPDATE calculo_nfs SET quantidade_estoque = %s WHERE id = %s", (nova_qtd, cn_id))
+                total_alterado += dec
+                valor_restante -= dec
+                detalhes.append({'cn_id': cn_id, 'entrada_id': entrada_id, 'alterado': str(dec), 'qtd_anterior': str(qtd_atual), 'qtd_nova': str(nova_qtd)})
+            else:  # Adicionar
+                limite = peso_liq - qtd_atual
+                if limite <= 0:
+                    # não é possível adicionar nessa entrada (atingiu peso_liquido)
+                    detalhes.append({'cn_id': cn_id, 'entrada_id': entrada_id, 'alterado': '0', 'motivo': 'limite atingido', 'qtd_atual': str(qtd_atual), 'peso_liq': str(peso_liq)})
+                    continue
+                dec = min(valor_restante, limite)
+                if dec <= 0:
+                    continue
+                nova_qtd = qtd_atual + dec
+                cur.execute("UPDATE calculo_nfs SET quantidade_estoque = %s WHERE id = %s", (nova_qtd, cn_id))
+                total_alterado += dec
+                valor_restante -= dec
+                detalhes.append({'cn_id': cn_id, 'entrada_id': entrada_id, 'alterado': str(dec), 'qtd_anterior': str(qtd_atual), 'qtd_nova': str(nova_qtd), 'peso_liq': str(peso_liq)})
+
+        if total_alterado > 0:
+            # usa o nome do produto baseado na primeira entrada retornada (se houver)
+            produto_para_historico = registros[0][4] if registros and registros[0] and registros[0][4] else (produto if not filtro_por_entrada_id else f'entrada_id:{entrada_id_val}')
+            tipo = 'adicionar' if operacao == 'Adicionar' else 'subtrair'
+            registrar_historico(usuario, None, produto_para_historico, total_alterado, tipo)
 
         conn.commit()
     except Exception as e:
         conn.rollback()
+        print("Erro em distribuir_quantidade:", e)
         return (f'Erro: {e}', 500)
     finally:
         cur.close()
         conn.close()
 
-    return jsonify({'id_produto': id_produto, 'nova_quantidade': str(nova_qtd)}), 200
+    return jsonify({
+        'quantidade_total_alterada': str(total_alterado),
+        'detalhes': detalhes
+    }), 200
 
-
-# -------------------------
-# Calcular custo (calcular_custos)
-# -------------------------
 @calculo_bp.route('/calcular', methods=['POST'])
 @login_required
 def calcular_custos():
@@ -464,9 +478,6 @@ def calcular_custos():
 
     return jsonify({'processed': len(results), 'results': results}), 200
 
-# -------------------------
-# Exportar para Excel (exportar_relatorio)
-# -------------------------
 @calculo_bp.route('/export', methods=['GET'])
 @login_required
 def exportar_relatorio():
@@ -518,33 +529,3 @@ def exportar_relatorio():
                      as_attachment=True,
                      download_name='Relatorio_calculo_produto.xlsx',
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-# -------------------------
-# Reiniciar IDs (reiniciar_ids_calculo)
-# -------------------------
-@calculo_bp.route('/reiniciar_ids', methods=['POST'])
-@login_required
-def reiniciar_ids_calculo():
-    conn = conectar()
-    cur = conn.cursor()
-    try:
-        cur.execute("""
-            WITH OrderedProducts AS (
-                SELECT id, ROW_NUMBER() OVER (ORDER BY id) AS new_id
-                FROM calculo_nfs
-            )
-            UPDATE calculo_nfs cn
-            SET id = op.new_id
-            FROM OrderedProducts op
-            WHERE cn.id = op.id
-        """)
-        cur.execute("SELECT setval(pg_get_serial_sequence('calculo_nfs', 'id'), (SELECT COALESCE(MAX(id),1) FROM calculo_nfs), true);")
-        conn.commit()
-        flash('IDs reiniciados com sucesso.', 'sucesso')
-    except Exception as e:
-        conn.rollback()
-        flash(f'Erro reiniciando IDs: {e}', 'erro')
-    finally:
-        cur.close()
-        conn.close()
-    return redirect(url_for('calculo_nfs.listar_calculo_nfs'))

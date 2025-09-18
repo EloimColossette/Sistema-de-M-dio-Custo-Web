@@ -256,7 +256,7 @@ html, body {
 /* Tabela em si */
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
   background-color: #fff;
 }
 
@@ -435,7 +435,10 @@ table .no-data { text-align: center; color: #777; padding: 24px; }
 .table-container table tbody td.sticky-col {
   position: sticky; /* o left será definido pelo JS inline */
   background-clip: padding-box;
-  box-shadow: 2px 0 6px rgba(0,0,0,0.06);
+  box-shadow: none;
+  background-clip: padding-box;
+  /* reforça fundo para sobrepor qualquer coisa abaixo */
+  background-color: #fff;
 }
 
 .table-container table thead th.sticky-col {
@@ -603,4 +606,9 @@ select:-webkit-autofill {
 .linha-alterada {
   background-color: #ffff99 !important;
   transition: background-color 0.3s;
+}
+
+.linha-alterada td,
+.linha-alterada td.sticky-col {
+  background-color: #ffff99 !important;
 }

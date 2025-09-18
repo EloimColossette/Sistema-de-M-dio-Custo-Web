@@ -326,10 +326,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const theadTr = table.querySelector('thead tr');
       if (!theadTr) return;
       const ths = Array.from(theadTr.children);
-      const stickyIndexes = [0,1,2];
 
-      // limpa estilos anteriores
-      stickyIndexes.forEach(idx => {
+      // colunas sticky que queremos: Data (0), NF (1), Produto (2)
+      const stickyIndexes = [0, 1, 2];
+
+      // limpa estilos antigos
+      stickyIndexes.forEach((idx) => {
         const headSel = `.table-container table thead th:nth-child(${idx+1})`;
         const bodySel = `.table-container table tbody td:nth-child(${idx+1})`;
         document.querySelectorAll(headSel + ',' + bodySel).forEach(el => {
@@ -342,30 +344,35 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       });
 
+      // calcula left cumulativo usando larguras inteiras (offsetWidth)
       let left = 0;
-      stickyIndexes.forEach(idx => {
+      stickyIndexes.forEach((idx) => {
         const th = ths[idx];
         if (!th) return;
-        const width = Math.ceil(th.getBoundingClientRect().width);
+
+        // largura inteira da coluna (inclui bordas internas)
+        const width = Math.round(th.offsetWidth);
 
         const headSelector = `.table-container table thead th:nth-child(${idx+1})`;
         const bodySelector = `.table-container table tbody td:nth-child(${idx+1})`;
 
+        // aplica nos headers
         document.querySelectorAll(headSelector).forEach(el => {
           el.style.position = 'sticky';
-          el.style.left = left + 'px';
+          el.style.left = Math.round(left) + 'px';
           el.style.zIndex = 250;
           el.style.background = '#f8f9fa';
-          el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.04)';
+          // sem box-shadow aqui para não criar costura visual
           el.classList.add('sticky-col');
         });
 
+        // aplica nas células do corpo
         document.querySelectorAll(bodySelector).forEach(el => {
           el.style.position = 'sticky';
-          el.style.left = left + 'px';
+          el.style.left = Math.round(left) + 'px';
           el.style.zIndex = 120;
           el.style.background = '#fff';
-          el.style.boxShadow = '2px 0 6px rgba(0,0,0,0.06)';
+          // sem box-shadow
           el.classList.add('sticky-col');
         });
 

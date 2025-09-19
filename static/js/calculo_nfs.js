@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const DECIMALS = {
     quantidade_estoque: 3,
     qtd_cobre: 3,
-    qtd_zinco: 2,
+    qtd_zinco: 3, // <-- certifica-se de 3 casas
     valor_total_nf: 2,
     mao_de_obra: 2,
     materia_prima: 2,
@@ -36,6 +36,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const decPart = parts[1] || '';
     intPart = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return intPart + ',' + decPart;
+  }
+
+  function updateRowStatus() {
+    // percorre todas as linhas e aplica classes ao input quantidade_estoque
+    $$('tbody tr').forEach(tr => {
+      const inputQty = tr.querySelector('input[data-field="quantidade_estoque"]');
+      const inputPeso = tr.querySelector('input[data-field="peso_liquido"]');
+
+      if (!inputQty || !inputPeso) return;
+
+      // pega valores numéricos (parseBRNumber já existe)
+      const q = Number(parseBRNumber(inputQty.value) || 0);
+      const p = Number(parseBRNumber(inputPeso.value) || 0);
+
+      // tolerância baseada nas casas decimais da quantidade_estoque
+      const decimals = DECIMALS.quantidade_estoque ?? 3;
+      const eps = Math.pow(10, -decimals) / 2;
+
+      // limpa classes antigas
+      inputQty.classList.remove('val-ok', 'val-modified', 'val-zero');
+
+      // aplica classes na prioridade desejada: zero -> igualdade -> modificado
+      if (Math.abs(q) <= eps) {
+        inputQty.classList.add('val-zero');
+      } else if (Math.abs(q - p) <= eps) {
+        inputQty.classList.add('val-ok');
+      } else {
+        inputQty.classList.add('val-modified');
+      }
+    });
   }
 
   function showResultModal(title, items, totalAlterado) {
@@ -76,10 +106,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const list = document.createElement('div');
     list.style.marginTop = '8px';
+
+    // monta cada item — cada row recebe data-entrada-id para referencia posterior
     items.forEach(it => {
       const row = document.createElement('div');
       row.style.padding = '8px';
       row.style.borderBottom = '1px solid #eee';
+      row.dataset.entradaId = String(it.entrada_id); // <-- adiciona atributo para identificar
       const nfLine = document.createElement('div');
       nfLine.style.fontWeight = '600';
       nfLine.textContent = `NF: ${it.nf_display}`;
@@ -111,6 +144,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     modal.appendChild(box);
     document.body.appendChild(modal);
+
+    // se existir item destacado, rola o modal para que ele apareça próximo ao topo do box
+    const highlighted = items.find(it => it._is_destaque);
+    if (highlighted) {
+      const rowEl = list.querySelector(`div[data-entrada-id="${highlighted.entrada_id}"]`);
+      if (rowEl) {
+        // rola suavemente o box para esse elemento (coloca no topo)
+        setTimeout(() => {
+          // scroll do container (box) — utilizamos box (o elemento com overflow:auto)
+          rowEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 50);
+      }
+    }
   }
 
   // Add / subtract behavior (keeps your original server call)
@@ -165,6 +211,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (inputQtd) inputQtd.value = formatBR(d.qtd_nova, DECIMALS.quantidade_estoque);
           });
 
+          updateRowStatus();
+
           // destaque: escolhe a última alteração
           let destaque = null;
           if (changed.length > 0) destaque = changed[changed.length - 1];
@@ -175,8 +223,21 @@ document.addEventListener('DOMContentLoaded', () => {
             tr.querySelectorAll('td').forEach(td => td.classList.remove('linha-alterada'));
           });
 
+          // --------- AQUI: reordena os detalhes para que o "destaque" vá para o topo do modal ----------
+          const detalhesReordenados = Array.isArray(detalhes) ? detalhes.slice() : [];
+          if (destaque) {
+            const idx = detalhesReordenados.findIndex(d => String(d.entrada_id) === String(destaque.entrada_id));
+            if (idx > -1) {
+              const [itemD] = detalhesReordenados.splice(idx, 1);
+              // marca para posterior rolagem no modal
+              itemD._is_destaque = true;
+              detalhesReordenados.unshift(itemD);
+            }
+          }
+          // caso não exista destaque ou não tenha sido encontrado, detalhesReordenados fica igual a detalhes
+
           // monta items e aplica destaque apenas na linha escolhida (a última)
-          const items = (detalhes || []).map(d => {
+          const items = (detalhesReordenados || []).map(d => {
             const entradaId = String(d.entrada_id);
             const tr = page.querySelector(`tbody tr[data-entrada-id="${entradaId}"]`);
             let nf_display = entradaId;
@@ -188,11 +249,12 @@ document.addEventListener('DOMContentLoaded', () => {
               if (destaque && String(destaque.entrada_id) === entradaId) {
                 tr.classList.add('linha-alterada');
                 tr.querySelectorAll('td').forEach(td => td.classList.add('linha-alterada'));
-                // scroll to highlighted row
+                // scroll to highlighted row in table
                 setTimeout(() => tr.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
               }
             }
 
+            // devolve o objeto de item para o modal; mantém _is_destaque se presente
             return {
               entrada_id: entradaId,
               cn_id: d.cn_id,
@@ -200,7 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
               qtd_anterior: d.qtd_anterior,
               qtd_nova: d.qtd_nova,
               motivo: d.motivo,
-              nf_display
+              nf_display,
+              _is_destaque: Boolean(d._is_destaque)
             };
           });
 
@@ -217,6 +280,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       return;
     }
+
+
 
     // local +/- behavior for input on same row (unchanged)
     const container = btn.closest('.form-actions-inline') || btn.closest('.form-row') || btn.closest('tr') || page;
@@ -288,6 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const n = Number(val);
     if (isNaN(n)) return;
     el.value = formatInputValueForDisplay(n, decimals);
+    updateRowStatus();
   }, true);
 
   page.addEventListener('paste', ev => {
@@ -390,11 +456,8 @@ document.addEventListener('DOMContentLoaded', () => {
     tableContainer.addEventListener('scroll', () => {
       // opcional: setStickyLefts() se necessário
     });
-
-    /* opcional:
-    const mo = new MutationObserver(() => setStickyLefts());
-    mo.observe(table, { childList:true, subtree:true, characterData:true });
-    */
   })();
 
+  // initial status pass
+  updateRowStatus();
 });

@@ -689,3 +689,23 @@ select:-webkit-autofill {
   /* se precisar reaparecer a versão antiga em page-controls, habilite */
   .page-controls .search-container { display: block; }
 }
+
+/* status de quantidade_estoque */
+.input-inline.val-ok {
+  color: #000 !important; /* preto */
+  font-weight: 600;
+  transition: color 0.18s ease;
+}
+
+.input-inline.val-modified {
+  /* amarelo-laranja para legibilidade */
+  color: #c59c00 !important; /* amarelo/âmbar */
+  font-weight: 700;
+  transition: color 0.18s ease;
+}
+
+.input-inline.val-zero {
+  color: #dc3545 !important; /* vermelho (mesmo tom dos botões delete) */
+  font-weight: 700;
+  transition: color 0.18s ease;
+}

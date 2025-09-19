@@ -456,7 +456,7 @@ input[type="checkbox"] {
 .card-add .card-body .search-container.header-right-search {
   position: absolute;
   right: 16px;
-  top: 30px;           /* <- valor ajustado: desceu um pouco (antes 48px) */
+  top: 28px;           /* <- valor ajustado: desceu um pouco (antes 48px) */
   width: 380px;
   max-width: calc(100% - 320px);
   z-index: 30;

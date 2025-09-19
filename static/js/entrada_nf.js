@@ -782,6 +782,9 @@ document.addEventListener('DOMContentLoaded', () => {
       // injeta HTML recebido
       modalContent.innerHTML = html;
 
+      applyStickyColumns(modalContent, ['select','data','nf','produto']);
+      window.addEventListener('resize', () => applyStickyColumnsDebounced(modalContent, ['select','data','nf','produto'], 120));
+
       // reaplica seus inicializadores
       try { initMainNumericInputs(modalContent); } catch(e) {}
       try { initMainNumericInputs(document); } catch(e) { console.warn('initMainNumericInputs init failed', e); }
@@ -3020,5 +3023,89 @@ document.addEventListener('DOMContentLoaded', () => {
       modalContent.style.paddingBottom = '';
     };
     table._fixedHScrollWrapper = wrapper;
+  }
+
+  // NOVA applyStickyColumns: soma apenas as larguras das colunas STICKY anteriores
+  function applyStickyColumns(root, colsArray = ['select','data','nf','produto']) {
+    if (!root) return;
+    const table = root.querySelector('.table-container table');
+    if (!table) return;
+    const headerRow = table.tHead ? table.tHead.rows[0] : table.querySelector('thead tr');
+    if (!headerRow) return;
+
+    // limpa estilos antigos
+    table.querySelectorAll('th.sticky-col, td.sticky-col').forEach(el => {
+      el.classList.remove('sticky-col');
+      el.style.left = '';
+      el.style.zIndex = '';
+      el.style.position = '';
+      el.style.boxShadow = '';
+      el.style.background = '';
+      el.style.color = '';
+    });
+
+    // mapeia cada data-col para seu index na tabela (DOM)
+    const stickyMap = []; // {colName, index}
+    colsArray.forEach(colName => {
+      const sample = table.querySelector(`tbody tr td[data-col="${colName}"]`);
+      if (sample) stickyMap.push({ colName, index: sample.cellIndex });
+      else {
+        // fallback: tenta encontrar th por texto (se necessário)
+        const th = Array.from(headerRow.cells).find(th => {
+          return (th.getAttribute('data-col') === colName) || ((th.textContent||'').trim().toLowerCase().includes((colName||'').toLowerCase()));
+        });
+        if (th) stickyMap.push({ colName, index: Array.from(headerRow.cells).indexOf(th) });
+      }
+    });
+
+    // filtra, remove duplicados e ordena por index (ordem DOM)
+    const unique = Array.from(new Map(stickyMap.map(s => [s.index, s])).values())
+      .filter(x => x && x.index >= 0)
+      .sort((a,b) => a.index - b.index);
+
+    if (!unique.length) return;
+
+    // calcula left acumulando SOMENTE as larguras das colunas sticky anteriores
+    let accumLeft = 0;
+    unique.forEach((entry, order) => {
+      const colIndex = entry.index;
+      const th = headerRow.children[colIndex];
+      const width = th ? th.getBoundingClientRect().width : (table.querySelector(`tbody tr td:nth-child(${colIndex+1})`)?.getBoundingClientRect().width || 0);
+
+      // aplica no TH
+      if (th) {
+        th.classList.add('sticky-col');
+        th.style.position = 'sticky';
+        th.style.left = `${accumLeft}px`;
+        // header deve ter z-index maior
+        th.style.zIndex = String(2000 - order);
+        th.style.background = '#2b6cb0';
+        th.style.color = '#fff';
+        th.style.boxShadow = '2px 0 6px rgba(0,0,0,0.06)';
+      }
+
+      // aplica nas tds dessa coluna
+      Array.from(table.querySelectorAll(`tbody tr`)).forEach((tr) => {
+        const cell = tr.children[colIndex];
+        if (!cell) return;
+        cell.classList.add('sticky-col');
+        cell.style.position = 'sticky';
+        cell.style.left = `${accumLeft}px`;
+        cell.style.zIndex = String(1500 - order);
+        // força background para evitar transparencia que mostra o "buraco"
+        const bg = getComputedStyle(cell).backgroundColor;
+        cell.style.background = (bg === 'rgba(0, 0, 0, 0)' || !bg) ? '#fff' : bg;
+        cell.style.boxShadow = '2px 0 6px rgba(0,0,0,0.04)';
+      });
+
+      // incrementa accum apenas com a largura desta coluna sticky
+      accumLeft += width;
+    });
+  }
+
+  // Debounce helper (usar em resize)
+  function applyStickyColumnsDebounced(root, cols, delay = 120) {
+    if (applyStickyColumnsDebounced._t) clearTimeout(applyStickyColumnsDebounced._t);
+    applyStickyColumnsDebounced._t = setTimeout(() => applyStickyColumns(root, cols), delay);
   }
 });

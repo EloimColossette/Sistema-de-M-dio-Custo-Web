@@ -38,6 +38,77 @@ document.addEventListener('DOMContentLoaded', () => {
     return intPart + ',' + decPart;
   }
 
+  // ---------------------------
+  // novo: formatação com preservação de caret
+  // ---------------------------
+  function onlyDigitsAndCommaDot(str) {
+    return String(str).replace(/[^\d\.,\-]/g, '');
+  }
+
+  // conta quantos dígitos (0-9) existem antes da posição pos em s
+  function countDigitsBefore(s, pos) {
+    let cnt = 0;
+    for (let i = 0; i < Math.min(pos, s.length); i++) {
+      if (/\d/.test(s[i])) cnt++;
+    }
+    return cnt;
+  }
+
+  // encontra posição (index) no string formatted onde ocorre o n-ésimo dígito (n >= 0)
+  function findPosOfNthDigit(formatted, n) {
+    let cnt = 0;
+    for (let i = 0; i < formatted.length; i++) {
+      if (/\d/.test(formatted[i])) {
+        if (cnt === n) return i + 1; // coloca cursor depois desse dígito
+        cnt++;
+      }
+    }
+    return formatted.length;
+  }
+
+  // formata mantendo cursor: el é <input>, decimals define casas decimais
+  function setFormattedInputValuePreserveCaret(el, decimals) {
+    const raw = el.value;
+    if (raw === '') return;
+    const selStart = el.selectionStart || 0;
+
+    // conte quantos dígitos estavam antes do caret no raw
+    const rawClean = onlyDigitsAndCommaDot(raw);
+    const digitsBefore = countDigitsBefore(rawClean, selStart);
+
+    // converte rawClean para Number (aceita ',' ou '.')
+    let numericStr = rawClean.replace(/\./g, '').replace(/,/g, '.');
+    // caso contenha vários pontos/virgulas estranhos, tenta limpar
+    const matches = numericStr.match(/-?\d+(\.\d+)?/);
+    if (!matches) {
+      // se não for numérico, apenas sanitiza
+      el.value = rawClean;
+      return;
+    }
+    let n = Number(matches[0]);
+    if (isNaN(n)) {
+      el.value = rawClean;
+      return;
+    }
+
+    // aplicar formatação com fartas casas decimais
+    const formatted = formatBR(n, decimals);
+
+    // encontrar nova posição do caret baseada em digitsBefore
+    const newPos = findPosOfNthDigit(formatted, digitsBefore - 1);
+    el.value = formatted;
+    // set selection (try/catch para navegadores antigos)
+    try {
+      el.setSelectionRange(newPos, newPos);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // ---------------------------
+  // fim: caret-safe formatting
+  // ---------------------------
+
   function updateRowStatus() {
     // percorre todas as linhas e aplica classes ao input quantidade_estoque
     $$('tbody tr').forEach(tr => {
@@ -159,6 +230,62 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // =====================
+  // MÁSCARA DINÂMICA: quantidade_estoque (3 decimais)
+  // =====================
+
+  /**
+   * Formata inteiro (representando unidades de 10^-decimals) para BR com separador de milhares e vírgula.
+   * Ex: intVal=1234, decimals=3 -> "1,234" (onde intVal representa 1.234)
+   */
+  function formatIntegerAsBR(intVal, decimals) {
+    const neg = intVal < 0;
+    let abs = String(Math.abs(Number(intVal)));
+    // garante pelo menos decimals+1 characters para simplificar (preenche com zeros à esquerda)
+    while (abs.length <= decimals) abs = '0' + abs;
+    const intPart = abs.slice(0, abs.length - decimals) || '0';
+    const decPart = abs.slice(abs.length - decimals);
+    const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return (neg ? '-' : '') + intFormatted + ',' + decPart;
+  }
+
+  /**
+   * Handler para comportamento dinâmico de "quantidade" com casas fixas (ex.: 3 decimais).
+   * - Mantém apenas dígitos (ignora outros caracteres)
+   * - Interpreta toda a sequência como um inteiro e "move" a vírgula 3 casas da direita
+   * - Atualiza o input e posiciona o cursor ao final (comportamento natural para esse tipo de máscara)
+   */
+  function handleDynamicQuantityInput(el, decimals = 3) {
+    // pega apenas dígitos do valor atual (mantendo sinal se houver)
+    const onlyDigits = (el.value || '').replace(/[^\d\-]/g, '');
+    // remove zeros à esquerda, mas mantém ao menos um zero se ficar vazio
+    let newRaw = onlyDigits.replace(/^0+(?=\d)/, '');
+    if (newRaw === '') {
+      // se o usuário apagou tudo, mantemos campo vazio
+      el.dataset._raw_value = '';
+      el.value = '';
+      return;
+    }
+    el.dataset._raw_value = newRaw;
+
+    // usar Number para valores "normais"; caso precise de mais precisão, adaptar para BigInt
+    let intVal = Number(newRaw);
+    if (!isFinite(intVal)) intVal = 0;
+
+    el.value = formatIntegerAsBR(intVal, decimals);
+
+    // posicione cursor ao final para comportamento natural de máscara dinâmica
+    try {
+      el.setSelectionRange(el.value.length, el.value.length);
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // =====================
+  // FIM MÁSCARA DINÂMICA
+  // =====================
+
   // Add / subtract behavior (keeps your original server call)
   page.addEventListener('click', ev => {
     const btn = ev.target.closest('.btn-icon');
@@ -208,7 +335,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const tr = page.querySelector(`tbody tr[data-entrada-id="${entradaId}"]`);
             if (!tr) return;
             const inputQtd = tr.querySelector('input[data-field="quantidade_estoque"]');
-            if (inputQtd) inputQtd.value = formatBR(d.qtd_nova, DECIMALS.quantidade_estoque);
+            if (inputQtd) {
+              // atualiza raw e valor formatado conforme máscara dinâmica
+              inputQtd.dataset._raw_value = String((d.qtd_nova || '').toString().replace(/[^\d\-]/g, ''));
+              // tentou converter como número com casas decimais; transformamos para inteiro raw => multiplicar por 10^decimals
+              // se payload do servidor já for string decimal "123.456", converteremos para inteiro de casas fixas:
+              const decimals = DECIMALS.quantidade_estoque ?? 3;
+              let numeric = parseBRNumber(d.qtd_nova);
+              if (!isNaN(numeric)) {
+                const intRep = String(Math.round(Math.abs(numeric) * Math.pow(10, decimals)));
+                inputQtd.dataset._raw_value = intRep;
+                inputQtd.value = formatIntegerAsBR(Number(intRep), decimals);
+              } else {
+                // fallback: escreve como BR (caso servidor tenha devolvido já em formato adequado)
+                inputQtd.value = formatBR(d.qtd_nova, DECIMALS.quantidade_estoque);
+              }
+            }
           });
 
           updateRowStatus();
@@ -281,8 +423,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-
-
     // local +/- behavior for input on same row (unchanged)
     const container = btn.closest('.form-actions-inline') || btn.closest('.form-row') || btn.closest('tr') || page;
     if (!container) return;
@@ -340,6 +480,65 @@ document.addEventListener('DOMContentLoaded', () => {
     return intPart + ',' + decPart;
   }
 
+  // aplica formatação nas células da tabela ao carregar (para colunas numéricas)
+  function formatTableNumericCells() {
+    // formata células <td> que possuem input[data-field] ou atributo data-format (fallback)
+    $$('tbody tr').forEach(tr => {
+      // procurar inputs (valores editáveis)
+      tr.querySelectorAll('input[data-field]').forEach(inp => {
+        const field = inp.dataset.field;
+        const decimals = DECIMALS[field] ?? 2;
+        // se tiver valor inicial não formatado, formata
+        if (inp.value && inp.value.trim() !== '') {
+          try {
+            // Para quantidade_estoque, se valor já vier como decimal "1.234,567" deixamos;
+            // se vier como número simples "1234.567", parseBRNumber lida com isso.
+            const num = parseBRNumber(inp.value);
+            if (!isNaN(num)) {
+              if (field === 'quantidade_estoque') {
+                // converte decimal para representação inteira raw (ex: 1.234,567 -> raw "1234567")
+                const mult = Math.pow(10, DECIMALS.quantidade_estoque);
+                const intRep = String(Math.round(Math.abs(num) * mult));
+                inp.dataset._raw_value = intRep;
+                inp.value = formatIntegerAsBR(Number(intRep), DECIMALS.quantidade_estoque);
+              } else {
+                inp.value = formatBR(num, decimals);
+              }
+            }
+          } catch (e) {}
+        } else {
+          // às vezes o valor está em atributo data-value
+          const dv = inp.getAttribute('data-value');
+          if (dv) {
+            const n = Number(String(dv).replace(',', '.'));
+            if (!isNaN(n)) {
+              if (inp.dataset.field === 'quantidade_estoque') {
+                const mult = Math.pow(10, DECIMALS.quantidade_estoque);
+                const intRep = String(Math.round(Math.abs(n) * mult));
+                inp.dataset._raw_value = intRep;
+                inp.value = formatIntegerAsBR(Number(intRep), DECIMALS.quantidade_estoque);
+              } else {
+                inp.value = formatBR(n, DECIMALS[inp.dataset.field] ?? 2);
+              }
+            }
+          }
+        }
+      });
+
+      // também formata <td data-field="..."> que não tenham input (apenas texto)
+      tr.querySelectorAll('td[data-field]').forEach(td => {
+        const field = td.dataset.field;
+        const decimals = DECIMALS[field] ?? 2;
+        const txt = (td.textContent || '').trim();
+        if (!txt) return;
+        const num = parseBRNumber(txt);
+        if (!isNaN(num)) {
+          td.textContent = formatBR(num, decimals);
+        }
+      });
+    });
+  }
+
   page.addEventListener('blur', ev => {
     const el = ev.target;
     if (!el.matches('.inline-input, .input-inline, input[data-field]')) return;
@@ -348,11 +547,58 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el.tagName.toLowerCase() === 'select') return;
     const decimals = DECIMALS[field] ?? 2;
     let val = (el.value || '').trim();
-    if (val === '') { el.value = ''; return; }
+    if (val === '') { el.value = ''; updateRowStatus(); return; }
+    // para quantidade_estoque, queremos garantir que ao perder foco o valor esteja com 3 decimais
+    if (field === 'quantidade_estoque') {
+      // se existir raw, usamos ele; senão tentamos converter o valor visível
+      const raw = el.dataset._raw_value || '';
+      if (raw) {
+        el.value = formatIntegerAsBR(Number(raw), DECIMALS.quantidade_estoque);
+      } else {
+        // tenta converter valor atual para número e aplicar formatação
+        val = val.replace(/\./g,'').replace(',', '.');
+        const n = Number(val);
+        if (!isNaN(n)) {
+          // converte para raw inteiro
+          const mult = Math.pow(10, DECIMALS.quantidade_estoque);
+          const intRep = String(Math.round(Math.abs(n) * mult));
+          el.dataset._raw_value = intRep;
+          el.value = formatIntegerAsBR(Number(intRep), DECIMALS.quantidade_estoque);
+        }
+      }
+      updateRowStatus();
+      return;
+    }
+
     val = val.replace(/\./g,'').replace(',', '.');
     const n = Number(val);
     if (isNaN(n)) return;
     el.value = formatInputValueForDisplay(n, decimals);
+    updateRowStatus();
+  }, true);
+
+  // novo: formata enquanto digita (input)
+  page.addEventListener('input', ev => {
+    const el = ev.target;
+    if (!el.matches('input[data-field]')) return;
+    if (el.tagName.toLowerCase() === 'select') return;
+    const field = el.dataset.field;
+    if (!field) return;
+
+    // comportamento DINÂMICO para quantidade_estoque (fixed decimals = 3)
+    if (field === 'quantidade_estoque') {
+      handleDynamicQuantityInput(el, DECIMALS.quantidade_estoque ?? 3);
+      updateRowStatus();
+      return;
+    }
+
+    // para outros campos, mantém o caret-safe formatting já implementado
+    const decimals = DECIMALS[field] ?? 2;
+    try {
+      setFormattedInputValuePreserveCaret(el, decimals);
+    } catch (e) {
+      // fallback: nada
+    }
     updateRowStatus();
   }, true);
 
@@ -361,6 +607,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!el.matches('.inline-input, .input-inline, input[data-field]')) return;
     if (el.tagName.toLowerCase() === 'select') return;
     const text = (ev.clipboardData || window.clipboardData).getData('text');
+    // Se for quantidade_estoque, aceitamos apenas dígitos colados (serão interpretados como integer raw)
+    const field = el.dataset.field;
+    if (field === 'quantidade_estoque') {
+      if (!/^[\d\s\.\,]+$/.test(text)) {
+        ev.preventDefault();
+        return;
+      }
+      // normaliza: retira tudo exceto dígitos, insere como raw
+      ev.preventDefault();
+      const onlyDigits = text.replace(/[^\d]/g, '');
+      el.dataset._raw_value = onlyDigits.replace(/^0+(?=\d)/, '');
+      // atualiza visual
+      handleDynamicQuantityInput(el, DECIMALS.quantidade_estoque ?? 3);
+      updateRowStatus();
+      return;
+    }
+
     if (!/^[\d\.,\s\-]+$/.test(text)) ev.preventDefault();
   });
 
@@ -382,7 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Sticky columns: Data(0), NF(1), Produto(2)
+  // Sticky columns initialization (mantive sua implementação)
   (function initStickyColumns() {
     const tableContainer = document.querySelector('.table-container');
     const table = tableContainer?.querySelector('table');
@@ -458,6 +721,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   })();
 
-  // initial status pass
+  // Inicializa dataset raw para quantidade_estoque (caso inputs já tenham valores)
+  $$('input[data-field="quantidade_estoque"]').forEach(i => {
+    const v = (i.value || '').trim();
+    if (!v) {
+      i.dataset._raw_value = '';
+      return;
+    }
+    // tenta interpretar como número (ex: "1.234,567" ou "1234.567")
+    const num = parseBRNumber(v);
+    if (!isNaN(num)) {
+      const mult = Math.pow(10, DECIMALS.quantidade_estoque);
+      const intRep = String(Math.round(Math.abs(num) * mult));
+      i.dataset._raw_value = intRep;
+      i.value = formatIntegerAsBR(Number(intRep), DECIMALS.quantidade_estoque);
+    } else {
+      // alternativa: extrai apenas dígitos do texto atual e usa como raw
+      const onlyDigits = v.replace(/[^\d]/g, '');
+      i.dataset._raw_value = onlyDigits.replace(/^0+(?=\d)/, '');
+    }
+  });
+
+  // initial status pass + formatação inicial das células
+  formatTableNumericCells();
   updateRowStatus();
 });

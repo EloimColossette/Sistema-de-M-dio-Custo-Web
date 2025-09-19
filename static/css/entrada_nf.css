@@ -399,8 +399,10 @@ html, body {
   font-size: 0.9rem;
   color: #333;
   border: 1px solid #ddd;
-  border-right: none;             /* remove divisórias verticais */
-  border-left: none;              /* remove divisórias verticais */
+  border-right: 1px solid #e6eef3 !important; /* cor do separador - troque se quiser mais escuro */
+  border-bottom: 1px solid #e6eef3 !important;
+  border-left: none !important; /* evita dupla linha entre células adjacentes */
+  background-clip: padding-box;
 }
 .table-container thead th {
   background: #2b6cb0;
@@ -411,6 +413,7 @@ html, body {
   white-space: nowrap;
   height: 36px;
   line-height: 32px;
+  border-bottom: 1px solid rgba(255,255,255,0.08) !important;
 }
 .table-container tbody tr:nth-child(even) { background: #f7fafc; }
 .table-container tbody tr:hover       { background: #e9eef3; }
@@ -424,6 +427,7 @@ html, body {
   color: #fff;
   z-index: 3;
   border-left: 1px solid #ddd; /* separação visível */
+  border-right: 1px solid #e6eef3 !important;
 }
 
 .table-container th:first-child,
@@ -1018,3 +1022,23 @@ td.acoes .btn-save[disabled] { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 480px) {
   .icon-btn .label { display: none; }
 }
+
+/* base para colunas "sticky" (JS define left e z-index dinamicamente) */
+.table-container th.sticky-col,
+.table-container td.sticky-col {
+  position: sticky;
+  /* left será aplicado inline pelo JS */
+  box-shadow: 2px 0 6px rgba(0,0,0,0.06);
+  background-clip: padding-box; /* evita vazamento do fundo em bordas */
+  border-right: 1px solid #ddd;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+
+/* header sticky com aparência do cabeçalho */
+.table-container th.sticky-col {
+  background: #2b6cb0 !important; /* mesma cor do cabeçalho */
+  color: #fff !important;
+  font-weight: 600;
+}
+

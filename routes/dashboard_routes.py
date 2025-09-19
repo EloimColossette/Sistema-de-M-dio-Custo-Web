@@ -71,36 +71,36 @@ def dashboard():
         try:
             cursor.execute("""
                 SELECT id, data::date, nf, fornecedor, produto, peso_liquido
-                  FROM entrada_nf
-                 ORDER BY id DESC
-                 LIMIT 1
+                FROM entrada_nf
+                WHERE data::date = (
+                    SELECT MAX(data::date) FROM entrada_nf
+                )
+                ORDER BY id ASC
             """)
-            row = cursor.fetchone()
-            if row:
+            rows = cursor.fetchall()
+
+            ultimas_entradas = []
+            for row in rows:
                 entrada_id, raw_data, numero_nf, fornecedor, produto, peso_val = row
 
                 # formata data
-                if hasattr(raw_data, "strftime"):
-                    data_str = raw_data.strftime("%d/%m/%Y")
-                else:
-                    data_str = raw_data or ''
+                data_str = raw_data.strftime("%d/%m/%Y") if hasattr(raw_data, "strftime") else str(raw_data)
 
                 # formata peso
                 try:
-                    peso_liq = f"{float(peso_val):,.3f}"
-                    peso_liq = peso_liq.replace(",", "X").replace(".", ",").replace("X", ".") + " Kg"
+                    peso_liq = f"{float(peso_val):,.3f}".replace(",", "X").replace(".", ",").replace("X", ".") + " Kg"
                 except Exception:
                     peso_liq = str(peso_val) if peso_val is not None else ''
 
-                ultima_entrada = {
+                ultimas_entradas.append({
                     "data": data_str,
                     "nf": numero_nf or '',
                     "fornecedor": fornecedor or '',
                     "produto": produto or '',
                     "peso_liquido": peso_liq
-                }
+                })
         except Exception:
-            ultima_entrada = None
+            ultimas_entradas = []
 
     finally:
         # garante fechamento de conexões
@@ -187,5 +187,5 @@ def dashboard():
         produtos=produtos,
         materiais=materiais,
         ultimas_saidas=ultimas_saidas_grouped,
-        ultima_entrada=ultima_entrada
+        ultimas_entradas=ultimas_entradas
     )

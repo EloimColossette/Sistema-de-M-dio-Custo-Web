@@ -126,6 +126,28 @@ html, body {
 .form-group input[type="text"]:focus,
 .form-group select:focus { outline: none; border-color: #007bff; }
 
+/* ---------------------------------------------------------
+   Ajuste solicitado: largura maior do campo de adição #novo_qtd
+   --------------------------------------------------------- */
+#novo_qtd {
+  /* largura preferencial no formulário de adição */
+  min-width: 100px;   /* largura mínima garantida */
+  width: 100px;       /* largura padrão */
+  max-width: 48vw;    /* limita em telas pequenas (48% da viewport) */
+  box-sizing: border-box;
+  text-align: center; /* mantém alinhamento consistente com inputs da tabela */
+}
+
+/* garante que o label/produto mantenha proporção com o novo campo */
+.form-row.horizontal .form-group:nth-child(2) {
+  flex: 0 0 auto; /* não encolhe automaticamente */
+}
+
+/* reduz o espaço do bloco de botões caso o input fique maior */
+.form-actions-inline {
+  margin-left: 8px; /* diminui margem para aproximar botões do input maior */
+}
+
 /* Botões do form */
 .form-row.form-row-submit {
   grid-column: span 2;
@@ -308,7 +330,7 @@ table .no-data { text-align: center; color: #777; padding: 24px; }
 .input-inline:focus { outline: none; border-color: #007bff; }
 
 /* Aumenta largura mínima da tabela inteira para evitar truncamento */
-.table-container table { min-width: 1600px; }
+.table-container table { min-width: 1700px; }
 
 /* =========================
    LARGURAS MÍNIMAS POR COLUNA (ajuste conforme necessário)
@@ -344,16 +366,16 @@ table .no-data { text-align: center; color: #777; padding: 24px; }
   min-width: 120px;
 }
 
-/* Coluna 5 (Qtd Estoque) */
+/* Coluna 5 (Qtd Estoque) — aumentado conforme pedido */
 .table-container table thead th:nth-child(5),
 .table-container table tbody td:nth-child(5) {
-  min-width: 160px;
+  min-width: 220px; /* aumentei de 160px para 220px */
 }
 .table-container table tbody td:nth-child(5) .input-inline {
-  min-width: 160px;
+  min-width: 220px;
 }
 
-/* Coluna 6 (Qtd Cobre) — a que você pediu especificamente */
+/* Coluna 6 (Qtd Cobre) */
 .table-container table thead th:nth-child(6),
 .table-container table tbody td:nth-child(6) {
   min-width: 180px;
@@ -437,9 +459,9 @@ table .no-data { text-align: center; color: #777; padding: 24px; }
   position: sticky; /* o left será definido pelo JS inline */
   background-clip: padding-box;
   box-shadow: none;
-  background-clip: padding-box;
   /* reforça fundo para sobrepor qualquer coisa abaixo */
   background-color: #fff;
+  border-right: 1px solid #e0e0e0; /* separador vertical consistente */
 }
 
 .table-container table thead th.sticky-col {
@@ -515,8 +537,7 @@ table .no-data { text-align: center; color: #777; padding: 24px; }
   display: flex;
   gap: 8px;
   align-items: center;
-  padding-left: 8px;
-  margin-left: auto;
+  margin-left: 0;
 }
 
 /* botão quadrado (mais/menos) */
@@ -532,6 +553,7 @@ table .no-data { text-align: center; color: #777; padding: 24px; }
   border-radius: 4px;
   cursor: pointer;
   line-height: 1;
+  margin-top: 11px; /* ajusta para descer */
 }
 .btn-icon:hover { transform: scale(1.04); }
 
@@ -644,12 +666,12 @@ select:-webkit-autofill {
 }
 
 /* pesquisa dentro do card-body (canto direito, alternativa) */
-/* ALTEREI top de 12px para 48px (descer mais) */
+/* ALTEREI top de 12px para 48px (descer mais) e largura reduzida conforme pedido */
 .card-add .card-body .search-container.header-right-search {
   position: absolute;
   right: 16px;
-  top: 60px; /* <- ajustado: descer mais para alinhar com controles */
-  width: 380px; /* ajuste se quiser maior/menor */
+  top: 40px; /* <- ajustado: descer mais para alinhar com controles */
+  width: 280px; /* redução solicitada (era 380px) */
   max-width: calc(100% - 320px);
   z-index: 30;
 }
@@ -674,6 +696,11 @@ select:-webkit-autofill {
     width: 260px;
     max-width: calc(100% - 160px);
   }
+
+  /* reduz o tamanho do novo campo de quantidade em telas médias */
+  #novo_qtd { width: 220px; min-width: 160px; }
+
+  .table-container table { min-width: 1400px; }
 }
 
 @media (max-width: 560px) {
@@ -688,6 +715,10 @@ select:-webkit-autofill {
   }
   /* se precisar reaparecer a versão antiga em page-controls, habilite */
   .page-controls .search-container { display: block; }
+
+  /* em telas muito pequenas o campo de adição ocupa toda a largura */
+  #novo_qtd { width: 100%; min-width: 0; }
+  .table-container table { min-width: 100%; }
 }
 
 /* status de quantidade_estoque */

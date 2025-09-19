@@ -80,6 +80,7 @@ html, body {
 
 .card-add .card-body {
   padding: var(--card-add-padding-vertical) 16px 8px 16px;
+  position: relative; /* importante caso use header-right-search */
 }
 
 /* Grid do form */
@@ -226,7 +227,7 @@ html, body {
   padding-top: 6px;
 }
 
-/* Barra de pesquisa */
+/* Barra de pesquisa (comportamento padrão caso use dentro do body ou header) */
 .search-container {
   margin-bottom: 8px;
 }
@@ -611,4 +612,80 @@ select:-webkit-autofill {
 .linha-alterada td,
 .linha-alterada td.sticky-col {
   background-color: #ffff99 !important;
+}
+
+/* =========================
+   PESQUISA NO HEADER (QUADRADO VERMELHO) E NO CARD-BODY (CANTO DIREITO)
+   =========================
+   Suporta tanto:
+     - .card-add .card-header .search-container.header-search
+     - .card-add .card-body  .search-container.header-right-search
+   Use a que preferir no HTML; ambas tem o mesmo visual/responsividade.
+*/
+
+/* pesquisa dentro do header (se você colocar a search no header) */
+.card-add .card-header .search-container.header-search {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 380px; /* ajuste se quiser maior/menor */
+  max-width: calc(100% - 220px); /* evita sobrepor o título em larguras médias */
+  z-index: 30;
+}
+.card-add .card-header .search-container.header-search input {
+  width: 100%;
+  padding: 8px 10px;
+  height: var(--input-height);
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  box-sizing: border-box;
+  font-size: 0.95rem;
+}
+
+/* pesquisa dentro do card-body (canto direito, alternativa) */
+/* ALTEREI top de 12px para 48px (descer mais) */
+.card-add .card-body .search-container.header-right-search {
+  position: absolute;
+  right: 16px;
+  top: 60px; /* <- ajustado: descer mais para alinhar com controles */
+  width: 380px; /* ajuste se quiser maior/menor */
+  max-width: calc(100% - 320px);
+  z-index: 30;
+}
+.card-add .card-body .search-container.header-right-search input {
+  width: 100%;
+  padding: 8px 10px;
+  height: var(--input-height);
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  box-sizing: border-box;
+  font-size: 0.95rem;
+}
+
+/* se você manteve a search antiga dentro de .page-controls, esta regra a esconde
+   para evitar duplicação visual. */
+.page-controls .search-container { display: none; }
+
+/* responsividade: reduz a largura em telas menores e empilha em telas pequenas */
+@media (max-width: 880px) {
+  .card-add .card-header .search-container.header-search,
+  .card-add .card-body .search-container.header-right-search {
+    width: 260px;
+    max-width: calc(100% - 160px);
+  }
+}
+
+@media (max-width: 560px) {
+  .card-add .card-header .search-container.header-search,
+  .card-add .card-body .search-container.header-right-search {
+    position: static;
+    transform: none;
+    width: 100%;
+    margin-top: 8px;
+    right: auto;
+    top: auto;
+  }
+  /* se precisar reaparecer a versão antiga em page-controls, habilite */
+  .page-controls .search-container { display: block; }
 }

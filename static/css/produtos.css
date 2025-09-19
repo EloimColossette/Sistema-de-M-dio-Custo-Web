@@ -67,6 +67,7 @@ html, body {
 /* Interno do card-add */
 .card-add .card-body {
   padding: 12px 16px;
+  position: relative; /* necessário para posicionamento absoluto da search */
 }
 
 /* Ajuste para formulário dentro do card-add */
@@ -116,6 +117,10 @@ html, body {
   border-color: #007bff;
 }
 
+/* spacer opcional para alinhar visualmente em certas larguras */
+.form-group.form-group-spacer {
+  display: none;
+}
 
 /* RADIO-GROUP dentro da segunda linha */
 .radio-group {
@@ -229,45 +234,6 @@ html, body {
   background-color: #c82333;
 }
 
-/* Grupos de botões (esquerda e direita) */
-.botoes-esquerda,
-.botoes-direita {
-  display: flex;
-  gap: 8px;
-}
-
-/* Empurra os botões da direita para o fim da linha */
-.botoes-direita {
-  margin-left: auto;
-}
-
-/* Botões sucesso e perigo */
-.btn-success {
-  background-color: #28a745;
-  color: #fff;
-  text-decoration: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  font-size: 0.95rem;
-  transition: background-color 0.2s;
-}
-.btn-success:hover {
-  background-color: #218838;
-}
-
-.btn-danger {
-  background-color: #dc3545;
-  color: #fff;
-  text-decoration: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  font-size: 0.95rem;
-  transition: background-color 0.2s;
-}
-.btn-danger:hover {
-  background-color: #c82333;
-}
-
 /* CARD “Produtos Cadastrados” */
 .card-list {
   border-radius: 0 0 8px 8px;
@@ -294,25 +260,6 @@ html, body {
   text-align: center;
   font-size: 1.25rem;
   margin: 0;
-}
-
-/* Botão “Excluir Selecionados” no canto direito */
-.btn-delete-selected {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  background-color: #dc3545;
-  color: #fff;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.95rem;
-  transition: background-color 0.2s;
-}
-.btn-delete-selected:hover {
-  background-color: #c82333;
 }
 
 /* Interno do card-list */
@@ -447,7 +394,7 @@ table .no-data {
   }
 }
 
-/* Barra de pesquisa dentro do card-add */
+/* Barra de pesquisa dentro do card-add (fluxo normal) */
 .search-container {
   margin-bottom: 16px;
 }
@@ -497,4 +444,57 @@ input[type="checkbox"] {
   background-color: #e6f0ff;
   border-left: 4px solid #007bff;
   color: #004085;
+}
+
+/* =========================
+   POSICIONAMENTO DA PESQUISA NO "QUADRADO VERMELHO"
+   =========================
+   (use a classe header-right-search no HTML para ativar este posicionamento)
+*/
+
+/* pesquisa dentro do card-body (canto direito) */
+.card-add .card-body .search-container.header-right-search {
+  position: absolute;
+  right: 16px;
+  top: 30px;           /* <- valor ajustado: desceu um pouco (antes 48px) */
+  width: 380px;
+  max-width: calc(100% - 320px);
+  z-index: 30;
+}
+.card-add .card-body .search-container.header-right-search input {
+  width: 100%;
+  height: 36px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  box-sizing: border-box;
+}
+
+/* se você tiver uma search padrão dentro do fluxo e não quiser duplicar, esconda-a */
+.page-controls .search-container { display: none; }
+
+/* responsividade: reduz a largura em telas menores e empilha em mobile */
+@media (max-width: 980px) {
+  .card-add .card-body .search-container.header-right-search {
+    width: 260px;
+    max-width: calc(100% - 160px);
+    top: 60px;
+  }
+  /* ativa o spacer para manter alinhamento caso precise */
+  .form-group.form-group-spacer { display: block; min-height: 1px; }
+}
+
+@media (max-width: 560px) {
+  .card-add .card-body .search-container.header-right-search {
+    position: static;
+    transform: none;
+    width: 100%;
+    margin-bottom: 12px;
+    top: auto;
+    right: auto;
+  }
+  /* empilha o formulário em mobile */
+  .card-add .card-body form { display: block; }
+  .form-row.horizontal { flex-direction: column; gap: 12px; }
+  .form-group.form-group-spacer { display: none; }
 }

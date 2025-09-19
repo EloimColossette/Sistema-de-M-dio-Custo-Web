@@ -13,11 +13,12 @@
     <div class="card card-add">
       <div class="card-header">
         <h2>Produtos</h2>
-        <a href="{{ url_for('dashboard.dashboard') }}" class="btn-back-dashboard">← Dashboard</a>
+        <a href="{{ url_for('dashboard.dashboard') }}" class="btn-back-dashboard">← Menu</a>
       </div>
       <div class="card-body">
 
-        <div class="search-container">
+        <!-- pesquisa posicionada à direita (canto vermelho do print) -->
+        <div class="search-container header-right-search" aria-label="Campo de pesquisa">
           <input type="text" id="search_produto" placeholder="🔍 Pesquisar produtos cadastrados..." />
         </div>
 
@@ -45,7 +46,11 @@
               <label for="pc_zinco">% Zinco:</label>
               <input type="text" id="pc_zinco" name="pc_zinco" placeholder="Ex: 39,50" required />
             </div>
+
+            <!-- opcional spacer para manter alinhamento em algumas larguras -->
+            <div class="form-group form-group-spacer" aria-hidden="true"></div>
           </div>
+
           <div class="form-row form-row-submit">
             <div class="botoes-esquerda">
               <button type="submit" class="btn-primary">Adicionar Produto</button>
@@ -74,7 +79,7 @@
         </button>
       </div>
       <div class="card-body">
-        <!-- Form de exclusão em massa, agora fora da table -->
+        <!-- Form de exclusão em massa -->
         <form id="form-delete-selecionados"
               action="{{ url_for('produtos.delete_selecionados_produtos') }}"
               method="post">
@@ -95,7 +100,6 @@
               {% for p in produtos %}
               <tr data-id="{{ p.id }}">
                 <td>
-                  <!-- checkbox agora referenciada ao form-delete-selecionados -->
                   <input type="checkbox"
                          name="produto_ids"
                          value="{{ p.id }}"
@@ -113,25 +117,24 @@
 
                 <td>
                   <input type="text"   
-                  class="input-inline" 
-                  data-field="pc_cobre" 
-                  value="{{ ('%.2f'|format(p.percentual_cobre)).replace('.',',') }}%" 
-                  disabled />
+                         class="input-inline" 
+                         data-field="pc_cobre" 
+                         value="{{ ('%.2f'|format(p.percentual_cobre)).replace('.',',') }}%" 
+                         disabled />
                 </td>
 
                 <td>
                   <input type="text"   
-                  class="input-inline" 
-                  data-field="pc_zinco" 
-                  value="{{ ('%.2f'|format(p.percentual_zinco)).replace('.',',') }}%" 
-                  disabled />
+                         class="input-inline" 
+                         data-field="pc_zinco" 
+                         value="{{ ('%.2f'|format(p.percentual_zinco)).replace('.',',') }}%" 
+                         disabled />
                 </td>
 
                 <td class="col-actions">
                   <span class="icon edit-icon" title="Editar">✏️</span>
                   <span class="icon save-icon hidden" title="Salvar">💾</span>
 
-                  <!-- botão individual aponta para form “fantasma” externo -->
                   <button
                     type="submit"
                     class="icon delete-icon btn-delete-confirm"
@@ -151,7 +154,7 @@
           </table>
         </div>
 
-        <!-- Forms “fantasma” individuais _fora_ da table -->
+        <!-- Forms “fantasma” individuais -->
         {% for p in produtos %}
         <form id="delete-{{ p.id }}"
               action="{{ url_for('produtos.delete_produto', prod_id=p.id) }}"

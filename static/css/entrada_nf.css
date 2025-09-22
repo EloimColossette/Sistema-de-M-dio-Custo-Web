@@ -399,7 +399,7 @@ html, body {
   font-size: 0.9rem;
   color: #333;
   border: 1px solid #ddd;
-  border-right: 1px solid #e6eef3 !important; /* cor do separador - troque se quiser mais escuro */
+  border-right: none !important; /* cor do separador - troque se quiser mais escuro */
   border-bottom: 1px solid #e6eef3 !important;
   border-left: none !important; /* evita dupla linha entre células adjacentes */
   background-clip: padding-box;
@@ -1033,6 +1033,22 @@ td.acoes .btn-save[disabled] { opacity: 0.5; cursor: not-allowed; }
   border-right: 1px solid #ddd;
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
+  overflow: visible; /* permite pseudo-elemento ficar visível */
+}
+
+/* pseudo-elemento que cobre o gap à direita da coluna sticky */
+.table-container th.sticky-col::after,
+.table-container td.sticky-col::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -4px;       /* sobrepõe alguns pixels ao lado direito */
+  width: 6px;        /* largura da "tampa" — ajuste se necessário */
+  background: inherit; /* usa o mesmo fundo da célula */
+  pointer-events: none;
+  z-index: 6;        /* ficar acima do conteúdo adjacente */
+  box-shadow: none;
 }
 
 /* header sticky com aparência do cabeçalho */

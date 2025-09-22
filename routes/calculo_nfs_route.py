@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, send_file
 from routes.auth_routes import login_required
 from conexao_db import conectar
+import math
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import io
 import pandas as pd
@@ -118,13 +119,33 @@ def normalize_name(s):
     t = re.sub(r'\s+', ' ', t).strip().upper()
     return t
 
-def _normalize_upper_no_space(s):
-    if not s:
-        return ''
-    t = str(s).strip().upper()
-    t = ''.join(c for c in unicodedata.normalize('NFD', t) if unicodedata.category(c) != 'Mn')
-    t = t.replace('\r', '').replace('\n', '').replace('\t', '').strip()
-    return t
+def safe_decimal_zero(value):
+    """
+    Converte value para Decimal, retornando Decimal('0') em qualquer caso inválido,
+    incluindo None, '', 'nan', float('nan'), Decimal('NaN'), etc.
+    """
+    try:
+        if value is None:
+            return Decimal('0')
+        # floats NaN
+        if isinstance(value, float):
+            if math.isnan(value):
+                return Decimal('0')
+            return Decimal(str(value))
+        s = str(value).strip()
+        if s == '':
+            return Decimal('0')
+        if s.lower() == 'nan':
+            return Decimal('0')
+        # evita problemas com vírgula como separador
+        s = s.replace(',', '.')
+        d = Decimal(s)
+        # se for NaN/Inf, tratar como zero
+        if d.is_nan() or d == Decimal('Infinity') or d == Decimal('-Infinity'):
+            return Decimal('0')
+        return d
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal('0')
 
 def calcular_qtd_cobre(cursor, produto_nome, fornecedor_nome, materiais_list, peso_liquido, peso_integral,
                        prod_map=None, forn_map=None, materials_by_fornecedor=None, materials_fallback=None):
@@ -428,6 +449,242 @@ def calcular_qtd_zinco(cursor, produto_nome, fornecedor_nome, materiais_list, pe
 
     return None
 
+def calcular_qtd_sucata(cursor, fornecedor_nome, materiais_list, peso_liquido, peso_integral,
+                        materials_by_fornecedor=None, materials_fallback=None, forn_map=None):
+    """
+    Retorna Decimal ou None para quantidade de sucata.
+    Compatível com as outras funções.
+    Agora consulta materials_by_fornecedor (quando disponível) usando o fornecedor_id,
+    e cai no materials_fallback caso não encontre.
+    """
+    try:
+        pl = Decimal(str(peso_liquido or 0))
+    except Exception:
+        pl = Decimal('0')
+    try:
+        pi = Decimal(str(peso_integral or 0))
+    except Exception:
+        pi = Decimal('0')
+
+    diff = pl - pi
+    if diff <= 0:
+        return None
+
+    # tenta obter fornecedor_id a partir do nome (se forn_map fornecido)
+    fornecedor_id = None
+    try:
+        if forn_map is not None and fornecedor_nome:
+            fornecedor_id = forn_map.get(normalize_name(fornecedor_nome))
+    except Exception:
+        fornecedor_id = None
+
+    # tenta via maps (agora respeitando fornecedor)
+    if materials_by_fornecedor is not None and materials_fallback is not None:
+        for mat in (materiais_list or []):
+            if not mat:
+                continue
+            mat_key = normalize_name(mat)
+            mat_info = None
+            # primeiro tenta material específico do fornecedor (se tivermos fornecedor_id)
+            if fornecedor_id is not None:
+                mat_info = materials_by_fornecedor.get((mat_key, fornecedor_id))
+            # depois tenta fallback global
+            if not mat_info:
+                mat_info = materials_fallback.get(mat_key)
+            if not mat_info:
+                continue
+            grupo, valor_mat = mat_info
+            if valor_mat is None:
+                continue
+            if grupo and 'sucata' in (grupo or '').lower():
+                try:
+                    if Decimal(str(valor_mat)) == 0:
+                        continue
+                    qtd = diff / Decimal(str(valor_mat))
+                    if qtd < 0:
+                        return None
+                    return qtd
+                except Exception:
+                    return None
+        return None
+
+    # fallback DB: (mantém comportamento atual)
+    for mat in (materiais_list or []):
+        if not mat:
+            continue
+        mat_norm = normalize_name(mat)
+        try:
+            cursor.execute("""
+                SELECT grupo, valor
+                FROM materiais
+                WHERE UPPER(TRIM(nome)) = %s
+                LIMIT 1
+            """, (mat_norm,))
+            mat_row = cursor.fetchone()
+        except Exception:
+            mat_row = None
+        if not mat_row:
+            continue
+        grupo = (mat_row[0] or '').strip().lower()
+        valor_material = mat_row[1]
+        try:
+            valor_material = Decimal(str(valor_material))
+        except Exception:
+            valor_material = None
+        if valor_material and grupo and 'sucata' in grupo:
+            try:
+                qtd = diff / valor_material
+                if qtd < 0:
+                    return None
+                return qtd
+            except Exception:
+                return None
+    return None
+
+def calcular_valor_total_nf(reg):
+    """
+    Recebe um dict 'reg' (como o que você monta em listar_calculo_nfs)
+    e retorna Decimal quantizado com 2 casas (valor_total_nf) ou None se não puder calcular.
+    Não faz updates no DB — só calcula e devolve o valor.
+    Campos usados (todos opcionais, tratados como 0 quando ausentes):
+      - peso_integral, valor_integral, ipi
+      - qtd_cobre, valor_unitario_1
+      - qtd_zinco, valor_unitario_2
+      - qtd_sucata, valor_unitario_3
+      - peso_liquido, valor_mao_obra_tm_metallica, valor_unitario_energia
+    """
+    try:
+        # garante Decimal seguros (caso valor seja None, '', float, str, etc)
+        peso_integral = Decimal(reg.get('peso_integral') or 0)
+        valor_integral = Decimal(reg.get('valor_integral') or 0)
+        ipi = Decimal(reg.get('ipi') or 0)
+
+        qtd_cobre = Decimal(reg.get('qtd_cobre') or 0)
+        valor_unitario_1 = Decimal(reg.get('valor_unitario_1') or 0)
+
+        qtd_zinco = Decimal(reg.get('qtd_zinco') or 0)
+        valor_unitario_2 = Decimal(reg.get('valor_unitario_2') or 0)
+
+        qtd_sucata = Decimal(reg.get('qtd_sucata') or 0)
+        valor_unitario_3 = Decimal(reg.get('valor_unitario_3') or 0)
+
+        peso_liquido = Decimal(reg.get('peso_liquido') or 0)
+        valor_mao_obra_tm = Decimal(reg.get('valor_mao_obra_tm_metallica') or 0)
+        valor_unitario_energia = Decimal(reg.get('valor_unitario_energia') or 0)
+
+        # diferença de pesos (somente positiva)
+        diferenca_peso = peso_liquido - peso_integral
+        if diferenca_peso < 0:
+            diferenca_peso = Decimal('0')
+
+        # trata ipi como percentual (ex: 5 => 5%)
+        valor_integral_com_ipi = valor_integral * (Decimal('1') + (ipi / Decimal('100')))
+
+        valor_total_calc = (
+            (peso_integral * valor_integral_com_ipi) +
+            (qtd_cobre * valor_unitario_1) +
+            (qtd_zinco * valor_unitario_2) +
+            (qtd_sucata * valor_unitario_3) +
+            (diferenca_peso * valor_mao_obra_tm) +
+            (diferenca_peso * valor_unitario_energia)
+        )
+
+        return valor_total_calc.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    except Exception as e:
+        # opcional: log
+        print("Erro calcular_valor_total_nf:", e)
+        return None
+
+def calcular_materia_prima_reg(reg):
+    """
+    Calcula Matéria Prima:
+      (qtd_cobre * valor_unitario_1) + (qtd_zinco * valor_unitario_2) + (qtd_sucata * valor_unitario_3)
+    Retorna Decimal quantizado com 2 casas ou None se não puder.
+    """
+    try:
+        qtd_cobre = Decimal(reg.get('qtd_cobre') or 0)
+        v1 = Decimal(reg.get('valor_unitario_1') or 0)
+        qtd_zinco = Decimal(reg.get('qtd_zinco') or 0)
+        v2 = Decimal(reg.get('valor_unitario_2') or 0)
+        qtd_sucata = Decimal(reg.get('qtd_sucata') or 0)
+        v3 = Decimal(reg.get('valor_unitario_3') or 0)
+
+        materia = (qtd_cobre * v1) + (qtd_zinco * v2) + (qtd_sucata * v3)
+        return materia.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    except Exception as e:
+        print("Erro calcular_materia_prima_reg:", e)
+        return None
+
+def calcular_mao_de_obra_reg(reg):
+    try:
+        peso_liq = safe_decimal_zero(reg.get('peso_liquido'))
+        peso_int = safe_decimal_zero(reg.get('peso_integral'))
+        diferenca = peso_liq - peso_int
+        if diferenca < 0:
+            diferenca = Decimal('0')
+
+        val_mao = safe_decimal_zero(reg.get('valor_mao_obra_tm_metallica'))
+        val_energia = safe_decimal_zero(reg.get('valor_unitario_energia'))
+
+        mao = diferenca * (val_mao + val_energia)
+        return mao.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    except Exception as e:
+        print("Erro calcular_mao_de_obra_reg:", e)
+        return None
+    
+def calcular_custo_total_reg(reg):
+    """
+    Calcula e retorna Decimal quantizado (2 casas) para custo_total de um registro 'reg'.
+    Regras:
+      1) Se custo_total_manual > 0 -> usar custo_total_manual
+      2) Senão, se valor_integral é vazio/0 -> custo = materia_prima + mao_de_obra
+      3) Senão, se peso_liquido > 0 -> custo = valor_total_nf / peso_liquido
+      4) Senão -> 0.00
+    Retorna Decimal (quantizado) ou None em caso de erro.
+    """
+    try:
+        # custo manual
+        custo_manual_raw = reg.get('custo_total_manual')
+        try:
+            custo_manual = Decimal(custo_manual_raw) if custo_manual_raw is not None and str(custo_manual_raw) != '' else None
+        except Exception:
+            custo_manual = None
+
+        # campos usados
+        vtf = Decimal(reg.get('valor_total_nf') or 0)
+        mpf = Decimal(reg.get('materia_prima') or 0)
+        maf = Decimal(reg.get('mao_de_obra') or 0)
+
+        try:
+            valor_integral_dec = Decimal(reg.get('valor_integral') or 0)
+        except Exception:
+            valor_integral_dec = Decimal('0')
+
+        try:
+            peso_liq = Decimal(reg.get('peso_liquido') or 0)
+        except Exception:
+            peso_liq = Decimal('0')
+
+        # regra 1
+        if custo_manual is not None and custo_manual > 0:
+            return custo_manual.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        # regra 2
+        if valor_integral_dec == 0:
+            return (mpf + maf).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        # regra 3
+        if peso_liq != 0:
+            custo = vtf / peso_liq
+            return custo.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        # fallback
+        return Decimal('0.00').quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+    except Exception as e:
+        print("Erro calcular_custo_total_reg:", e)
+        return None
+
 @calculo_bp.app_template_filter('br')
 def format_br_filter(value, decimals=2):
     """
@@ -467,6 +724,7 @@ def listar_calculo_nfs():
     conn = conectar()
     cur = conn.cursor()
     try:
+        # Seleciona também campos usados no cálculo de valor_total_nf / mao_de_obra / materia_prima
         cur.execute("""
             SELECT
                 en.id AS entrada_id,
@@ -477,9 +735,12 @@ def listar_calculo_nfs():
                 en.material_1, en.material_2, en.material_3, en.material_4, en.material_5,
                 en.peso_liquido AS peso_liquido,
                 en.peso_integral AS peso_integral,
+                en.valor_integral, en.ipi,
+                en.valor_unitario_1, en.valor_unitario_2, en.valor_unitario_3,
+                en.valor_mao_obra_tm_metallica, en.valor_unitario_energia,
                 cn.id AS calculo_id,
                 COALESCE(cn.quantidade_estoque, 0) AS quantidade_estoque,
-                cn.qtd_cobre, cn.qtd_zinco,
+                cn.qtd_cobre, cn.qtd_zinco, cn.qtd_sucata,
                 cn.valor_total_nf, cn.mao_de_obra, cn.materia_prima,
                 cn.custo_total_manual, cn.custo_total
             FROM entrada_nf en
@@ -503,15 +764,23 @@ def listar_calculo_nfs():
                 'material_5': r[9],
                 'peso_liquido': r[10],
                 'peso_integral': r[11],
-                'id': r[12],
-                'quantidade_estoque': r[13],
-                'qtd_cobre': r[14],
-                'qtd_zinco': r[15],
-                'valor_total_nf': r[16],
-                'mao_de_obra': r[17],
-                'materia_prima': r[18],
-                'custo_total_manual': r[19],
-                'custo_total': r[20],
+                'valor_integral': r[12],
+                'ipi': r[13],
+                'valor_unitario_1': r[14],
+                'valor_unitario_2': r[15],
+                'valor_unitario_3': r[16],
+                'valor_mao_obra_tm_metallica': r[17],
+                'valor_unitario_energia': r[18],
+                'id': r[19],
+                'quantidade_estoque': r[20],
+                'qtd_cobre': r[21],
+                'qtd_zinco': r[22],
+                'qtd_sucata': r[23],
+                'valor_total_nf': r[24],
+                'mao_de_obra': r[25],
+                'materia_prima': r[26],
+                'custo_total_manual': r[27],
+                'custo_total': r[28],
             })
 
         # formata datas simples
@@ -535,7 +804,6 @@ def listar_calculo_nfs():
 
         # ------------------------------
         # Pré-carrega produtos, fornecedores e materiais em memória (mapas)
-        # prod_map guarda tupla (pct_cobre_fraction, pct_zinco_fraction) se possível
         # ------------------------------
         prod_map = {}
         forn_map = {}
@@ -543,7 +811,6 @@ def listar_calculo_nfs():
         materials_fallback = {}
 
         try:
-            # tenta carregar as duas colunas (percentual_cobre, percentual_zinco)
             cur.execute("SELECT nome, percentual_cobre, percentual_zinco FROM produtos")
             for nome, pct_c, pct_z in cur.fetchall():
                 key = normalize_name(nome)
@@ -599,7 +866,7 @@ def listar_calculo_nfs():
             materials_fallback = {}
 
         # ------------------------------
-        # calcula qtd_cobre e qtd_zinco usando funções auxiliares
+        # calcula qtd_cobre, qtd_zinco, qtd_sucata e as colunas de custo usando funções auxiliares
         # ------------------------------
         for reg in registros:
             try:
@@ -612,14 +879,13 @@ def listar_calculo_nfs():
 
                 # cobre
                 existing_cobre = reg.get('qtd_cobre')
-                if existing_cobre is None or float(existing_cobre) == 0:
+                if existing_cobre is None or Decimal(str(existing_cobre or 0)) == 0:
                     try:
                         cobre_calc = calcular_qtd_cobre(cur, produto_nome, fornecedor_nome, materiais_list, peso_liq, peso_int,
                                                         prod_map=prod_map, forn_map=forn_map,
                                                         materials_by_fornecedor=materials_by_fornecedor,
                                                         materials_fallback=materials_fallback)
                         if cobre_calc is not None:
-                            # garante 3 casas decimais
                             q_cobre = Decimal(str(cobre_calc)).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
                             reg['qtd_cobre'] = q_cobre
                         else:
@@ -629,7 +895,7 @@ def listar_calculo_nfs():
 
                 # zinco
                 existing_zinco = reg.get('qtd_zinco')
-                if existing_zinco is None or float(existing_zinco) == 0:
+                if existing_zinco is None or Decimal(str(existing_zinco or 0)) == 0:
                     try:
                         zinco_calc = calcular_qtd_zinco(cur, produto_nome, fornecedor_nome, materiais_list, peso_liq, peso_int,
                                                         prod_map=prod_map, forn_map=forn_map,
@@ -643,8 +909,183 @@ def listar_calculo_nfs():
                     except Exception as e:
                         print("Aviso: erro ao calcular qtd_zinco (função) para entrada_id", reg.get('entrada_id'), e)
 
+                # sucata (agora passando forn_map para respeitar materiais por fornecedor)
+                existing_sucata = reg.get('qtd_sucata')
+                if existing_sucata is None or Decimal(str(existing_sucata or 0)) == 0:
+                    try:
+                        sucata_calc = calcular_qtd_sucata(cur, fornecedor_nome, materiais_list, peso_liq, peso_int,
+                                                          materials_by_fornecedor=materials_by_fornecedor,
+                                                          materials_fallback=materials_fallback,
+                                                          forn_map=forn_map)
+                        if sucata_calc is not None:
+                            q_sucata = Decimal(str(sucata_calc)).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+                            reg['qtd_sucata'] = q_sucata
+                        else:
+                            reg['qtd_sucata'] = None
+                    except Exception as e:
+                        print("Aviso: erro ao calcular qtd_sucata para entrada_id", reg.get('entrada_id'), e)
+
+                # valor_total_nf (apenas parte NF: peso_integral * valor_integral_com_ipi)
+                try:
+                    calc_val = calcular_valor_total_nf(reg)
+                    existing_valor = reg.get('valor_total_nf')
+                    if calc_val is not None:
+                        # mantem valor salvo > 0; caso contrário preenche com o calculado
+                        if existing_valor is None or Decimal(str(existing_valor or 0)) == 0:
+                            reg['valor_total_nf'] = calc_val
+                except Exception as e:
+                    print("Aviso: erro ao atribuir valor_total_nf para entrada_id", reg.get('entrada_id'), e)
+
+                # ----------------------------
+                # matéria-prima e mão-de-obra:
+                # calculamos o TOTAL (como já vinha sendo feito)
+                # e também o VALOR UNITÁRIO:
+                # - MATÉRIA-PRIMA: unitário por PESO_LÍQUIDO (ou desktop-flow quando valor_integral existe)
+                # - MÃO-DE-OBRA: unitário por DIFERENÇA_DE_PESO (mantido)
+                # ----------------------------
+                try:
+                    calc_mat_total = calcular_materia_prima_reg(reg)  # total (R$) -> soma(qtd * valor_unit)
+                except Exception as e:
+                    calc_mat_total = None
+                    print("Aviso: erro ao calcular materia_prima (total) para entrada_id", reg.get('entrada_id'), e)
+
+                try:
+                    calc_mao_total = calcular_mao_de_obra_reg(reg)  # total (R$)
+                except Exception as e:
+                    calc_mao_total = None
+                    print("Aviso: erro ao calcular mao_de_obra (total) para entrada_id", reg.get('entrada_id'), e)
+
+                # pega pesos com segurança
+                try:
+                    peso_liq_dec = Decimal(reg.get('peso_liquido') or 0)
+                except Exception:
+                    peso_liq_dec = Decimal('0')
+                try:
+                    peso_int_dec = Decimal(reg.get('peso_integral') or 0)
+                except Exception:
+                    peso_int_dec = Decimal('0')
+
+                # diferença de peso (usar como denominador para obtenção do unitário da mão-de-obra)
+                try:
+                    diferenca_peso = peso_liq_dec - peso_int_dec
+                    if diferenca_peso <= 0:
+                        diferenca_peso = None
+                except Exception:
+                    diferenca_peso = None
+
+                # Primeiro atribui mão-de-obra (total e unitário) — necessário antes de calcular custo_total quando valor_integral existe
+                try:
+                    if calc_mao_total is not None:
+                        reg['mao_de_obra_total'] = Decimal(calc_mao_total).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                        if diferenca_peso:
+                            unit_mao = (Decimal(calc_mao_total) / diferenca_peso).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                            reg['mao_de_obra'] = unit_mao
+                        else:
+                            reg['mao_de_obra'] = Decimal(calc_mao_total).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                    else:
+                        reg['mao_de_obra_total'] = None
+                        reg['mao_de_obra'] = None
+                except Exception as e:
+                    print("Aviso: erro ao atribuir mao_de_obra para entrada_id", reg.get('entrada_id'), e)
+                    reg['mao_de_obra_total'] = None
+                    reg['mao_de_obra'] = None
+
+                # Agora: calcular custo_total (unitário) usando a função centralizada.
+                # Isso é importante porque, no desktop, quando valor_integral existe, a matéria-prima unitária
+                # é obtida como (custo_total_unitario - mao_de_obra_unitario).
+                try:
+                    calc_ct = calcular_custo_total_reg(reg)
+                    if calc_ct is not None:
+                        reg['custo_total'] = calc_ct
+                    else:
+                        reg['custo_total'] = Decimal('0.00').quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                except Exception as e:
+                    print("Aviso: erro ao atribuir custo_total para entrada_id", reg.get('entrada_id'), e)
+                    reg['custo_total'] = Decimal('0.00').quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+                # Agora decide materia_prima seguindo 1:1 com o desktop:
+                # - Se valor_integral existe (não nulo e != 0) => materia_prima_unit = custo_total_unit - mao_de_obra_unit
+                # - Senão => materia_prima_unit = calc_mat_total / peso_liq_dec  (se possível)
+                try:
+                    if reg.get('valor_integral') not in (None, '') and Decimal(str(reg.get('valor_integral') or 0)) != 0:
+                        # segue fluxo desktop: unitário = custo_total (unit) - mao_de_obra (unit)
+                        try:
+                            custo_unit = Decimal(reg.get('custo_total') or 0)
+                            mao_unit = Decimal(reg.get('mao_de_obra') or 0)
+                            materia_unit = custo_unit - mao_unit
+                            # guarda total (se calculado) e unitário
+                            reg['materia_prima_total'] = (Decimal(calc_mat_total).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                                                         if calc_mat_total is not None else None)
+                            reg['materia_prima'] = materia_unit.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                        except Exception:
+                            reg['materia_prima_total'] = None
+                            reg['materia_prima'] = None
+                    else:
+                        # sem valor_integral: usar total calculado dividido por peso_liquido (compatível com desktop)
+                        if calc_mat_total is not None:
+                            total_mat = Decimal(calc_mat_total)
+                            reg['materia_prima_total'] = total_mat.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                            if peso_liq_dec > 0:
+                                unit_mat = (total_mat / peso_liq_dec).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                                reg['materia_prima'] = unit_mat
+                            else:
+                                # sem peso_liquido definido, manter total
+                                reg['materia_prima'] = total_mat.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                        else:
+                            reg['materia_prima_total'] = None
+                            reg['materia_prima'] = None
+                except Exception as e:
+                    print("Aviso: erro ao atribuir materia_prima para entrada_id", reg.get('entrada_id'), e)
+                    reg['materia_prima_total'] = None
+                    reg['materia_prima'] = None
+
+                # --- persistir cálculos no DB (upsert por entrada_id)
+                try:
+                    entrada_id_val = reg.get('entrada_id')
+                    if entrada_id_val is not None:
+                        v_qtd_cobre = reg.get('qtd_cobre')
+                        v_qtd_zinco = reg.get('qtd_zinco')
+                        v_qtd_sucata = reg.get('qtd_sucata')
+                        v_valor_total_nf = reg.get('valor_total_nf')
+                        v_mao_de_obra = reg.get('mao_de_obra')
+                        v_materia_prima = reg.get('materia_prima')
+                        v_custo_total = reg.get('custo_total')
+
+                        upsert_sql = """
+                            INSERT INTO calculo_nfs (
+                                entrada_id, qtd_cobre, qtd_zinco, qtd_sucata,
+                                valor_total_nf, mao_de_obra, materia_prima, custo_total
+                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (entrada_id) DO UPDATE SET
+                                qtd_cobre = COALESCE(EXCLUDED.qtd_cobre, calculo_nfs.qtd_cobre),
+                                qtd_zinco = COALESCE(EXCLUDED.qtd_zinco, calculo_nfs.qtd_zinco),
+                                qtd_sucata = COALESCE(EXCLUDED.qtd_sucata, calculo_nfs.qtd_sucata),
+                                valor_total_nf = COALESCE(EXCLUDED.valor_total_nf, calculo_nfs.valor_total_nf),
+                                mao_de_obra = COALESCE(EXCLUDED.mao_de_obra, calculo_nfs.mao_de_obra),
+                                materia_prima = COALESCE(EXCLUDED.materia_prima, calculo_nfs.materia_prima),
+                                custo_total = COALESCE(EXCLUDED.custo_total, calculo_nfs.custo_total)
+                        """
+                        cur.execute(upsert_sql, (
+                            entrada_id_val,
+                            v_qtd_cobre, v_qtd_zinco, v_qtd_sucata,
+                            v_valor_total_nf, v_mao_de_obra, v_materia_prima, v_custo_total
+                        ))
+                except Exception as e:
+                    # loga, mas não quebra a listagem
+                    print("Aviso: falha ao salvar calculos para entrada_id", reg.get('entrada_id'), e)
+
             except Exception as e:
                 print("Aviso: erro no loop de pré-cálculo para entrada_id", reg.get('entrada_id'), e)
+
+        # commit dos upserts feitos acima
+        try:
+            conn.commit()
+        except Exception as e:
+            print("Aviso: falha no commit dos cálculos:", e)
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
         # lista de produtos para dropdown
         cur.execute("""

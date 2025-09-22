@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     quantidade_estoque: 3,
     qtd_cobre: 3,
     qtd_zinco: 3, // <-- certifica-se de 3 casas
+    qtd_sucata: 3,
     valor_total_nf: 2,
     mao_de_obra: 2,
     materia_prima: 2,

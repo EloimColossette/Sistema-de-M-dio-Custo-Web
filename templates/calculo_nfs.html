@@ -25,7 +25,6 @@
 
         <!-- bloco de controles / page-controls (vazio por enquanto) -->
         <div class="page-controls">
-          <!-- espaço para outros controles, se precisar -->
         </div>
 
         <!-- Formulário de adição -->
@@ -75,6 +74,7 @@
                 <th>Qtd Estoque</th>
                 <th>Qtd Cobre</th>
                 <th>Qtd Zinco</th>
+                <th>Qtd Sucata</th> <!-- nova coluna -->
                 <th>Valor Total NFs</th>
                 <th>Mão de Obra</th>
                 <th>Matéria Prima</th>
@@ -89,22 +89,23 @@
                 <!-- Data da entrada_nf (formatada) -->
                 <td>{{ e.data or '' }}</td>
 
-                <!-- NF (vinda de entrada_nf) -->
+                <!-- NF -->
                 <td class="td-nf">{{ e.nf or '' }}</td>
 
-                <!-- Produto: texto simples (removi o select inline)
-                     adicionei um span escondido com .td-id para a busca por id -->
+                <!-- Produto -->
                 <td class="td-produto">
                   {{ e.produto or '' }}
                   <span class="td-id" style="display:none" aria-hidden="true">{{ e.id or '' }}</span>
                 </td>
 
-                <!-- Peso líquido (vindo de entrada_nf) -->
+                <!-- Peso líquido -->
                 <td><input class="input-inline" data-field="peso_liquido" value="{{ ('%.3f'|format(e.peso_liquido or 0)).replace('.', ',') }}" disabled></td>
 
                 <td><input class="input-inline" data-field="quantidade_estoque" value="{{ ('%.3f'|format(e.quantidade_estoque or 0)).replace('.', ',') }}" disabled></td>
                 <td><input class="input-inline" data-field="qtd_cobre" value="{{ ('%.3f'|format(e.qtd_cobre or 0)).replace('.', ',') }}" disabled></td>
                 <td><input class="input-inline" data-field="qtd_zinco" value="{{ ('%.3f'|format(e.qtd_zinco or 0)).replace('.', ',') }}" disabled></td>
+                <td><input class="input-inline" data-field="qtd_sucata" value="{{ ('%.3f'|format(e.qtd_sucata or 0)).replace('.', ',') }}" disabled></td> <!-- novo input -->
+
                 <td><input class="input-inline" data-field="valor_total_nf" value="{{ ('%.2f'|format(e.valor_total_nf or 0)).replace('.', ',') }}" disabled></td>
                 <td><input class="input-inline" data-field="mao_de_obra" value="{{ ('%.2f'|format(e.mao_de_obra or 0)).replace('.', ',') }}" disabled></td>
                 <td><input class="input-inline" data-field="materia_prima" value="{{ ('%.2f'|format(e.materia_prima or 0)).replace('.', ',') }}" disabled></td>
@@ -117,7 +118,7 @@
                 </td>
               </tr>
               {% else %}
-              <tr><td colspan="13" class="no-data">Nenhum registro no estoque.</td></tr>
+              <tr><td colspan="14" class="no-data">Nenhum registro no estoque.</td></tr>
               {% endfor %}
             </tbody>
           </table>

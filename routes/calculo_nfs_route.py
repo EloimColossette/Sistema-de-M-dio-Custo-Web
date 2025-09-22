@@ -616,6 +616,16 @@ def calcular_materia_prima_reg(reg):
         return None
 
 def calcular_mao_de_obra_reg(reg):
+    """
+    Retorna o TOTAL (Decimal) de mão de obra para o registro 'reg'.
+
+    Regras:
+      - Se (valor_mao_obra_tm_metallica + valor_unitario_energia) != 0 ->
+          total = diferenca * (valor_mao + valor_energia)
+      - Senão -> usar fallback: unit = soma(duplicata_1..6) / peso_liquido
+          total = unit * diferenca (apenas se peso_liquido > 0)
+      - Senão -> 0.00
+    """
     try:
         peso_liq = safe_decimal_zero(reg.get('peso_liquido'))
         peso_int = safe_decimal_zero(reg.get('peso_integral'))
@@ -623,15 +633,33 @@ def calcular_mao_de_obra_reg(reg):
         if diferenca < 0:
             diferenca = Decimal('0')
 
+        # valores de mão e energia (safe_decimal_zero trata None/''/'nan'/float('nan') -> 0)
         val_mao = safe_decimal_zero(reg.get('valor_mao_obra_tm_metallica'))
         val_energia = safe_decimal_zero(reg.get('valor_unitario_energia'))
+        soma_vals = val_mao + val_energia
 
-        mao = diferenca * (val_mao + val_energia)
-        return mao.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        # se existe valor explícito de mão+energia, usar direto
+        if soma_vals != 0:
+            total = diferenca * soma_vals
+            return total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        # fallback: soma das duplicatas
+        soma_dup = Decimal('0')
+        for i in range(1, 7):
+            soma_dup += safe_decimal_zero(reg.get(f'duplicata_{i}'))
+
+        if peso_liq > 0 and soma_dup != 0:
+            unit = soma_dup / peso_liq
+            total = unit * diferenca
+            return total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+        # sem dados -> zero
+        return Decimal('0.00').quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
     except Exception as e:
         print("Erro calcular_mao_de_obra_reg:", e)
         return None
-    
+
 def calcular_custo_total_reg(reg):
     """
     Calcula e retorna Decimal quantizado (2 casas) para custo_total de um registro 'reg'.
@@ -738,6 +766,7 @@ def listar_calculo_nfs():
                 en.valor_integral, en.ipi,
                 en.valor_unitario_1, en.valor_unitario_2, en.valor_unitario_3,
                 en.valor_mao_obra_tm_metallica, en.valor_unitario_energia,
+                en.duplicata_1, en.duplicata_2, en.duplicata_3, en.duplicata_4, en.duplicata_5, en.duplicata_6,
                 cn.id AS calculo_id,
                 COALESCE(cn.quantidade_estoque, 0) AS quantidade_estoque,
                 cn.qtd_cobre, cn.qtd_zinco, cn.qtd_sucata,
@@ -749,39 +778,51 @@ def listar_calculo_nfs():
         """)
         rows = cur.fetchall()
 
+        # monta registros de forma robusta usando nomes de colunas
+        columns = [desc[0] for desc in cur.description]
         registros = []
-        for r in rows:
-            registros.append({
-                'entrada_id': r[0],
-                'data': r[1],
-                'nf': r[2],
-                'produto': r[3],
-                'fornecedor': r[4],
-                'material_1': r[5],
-                'material_2': r[6],
-                'material_3': r[7],
-                'material_4': r[8],
-                'material_5': r[9],
-                'peso_liquido': r[10],
-                'peso_integral': r[11],
-                'valor_integral': r[12],
-                'ipi': r[13],
-                'valor_unitario_1': r[14],
-                'valor_unitario_2': r[15],
-                'valor_unitario_3': r[16],
-                'valor_mao_obra_tm_metallica': r[17],
-                'valor_unitario_energia': r[18],
-                'id': r[19],
-                'quantidade_estoque': r[20],
-                'qtd_cobre': r[21],
-                'qtd_zinco': r[22],
-                'qtd_sucata': r[23],
-                'valor_total_nf': r[24],
-                'mao_de_obra': r[25],
-                'materia_prima': r[26],
-                'custo_total_manual': r[27],
-                'custo_total': r[28],
-            })
+        for row in rows:
+            rowdict = dict(zip(columns, row))
+
+            reg = {
+                'entrada_id': rowdict.get('entrada_id') or rowdict.get('id'),
+                'data': rowdict.get('entrada_data') or rowdict.get('data'),
+                'nf': rowdict.get('entrada_nf') or rowdict.get('nf'),
+                'produto': rowdict.get('entrada_produto') or rowdict.get('produto'),
+                'fornecedor': rowdict.get('entrada_fornecedor') or rowdict.get('fornecedor'),
+                'material_1': rowdict.get('material_1'),
+                'material_2': rowdict.get('material_2'),
+                'material_3': rowdict.get('material_3'),
+                'material_4': rowdict.get('material_4'),
+                'material_5': rowdict.get('material_5'),
+                'peso_liquido': rowdict.get('peso_liquido'),
+                'peso_integral': rowdict.get('peso_integral'),
+                'valor_integral': rowdict.get('valor_integral'),
+                'ipi': rowdict.get('ipi'),
+                'valor_unitario_1': rowdict.get('valor_unitario_1'),
+                'valor_unitario_2': rowdict.get('valor_unitario_2'),
+                'valor_unitario_3': rowdict.get('valor_unitario_3'),
+                'valor_mao_obra_tm_metallica': rowdict.get('valor_mao_obra_tm_metallica'),
+                'valor_unitario_energia': rowdict.get('valor_unitario_energia'),
+                'duplicata_1': rowdict.get('duplicata_1'),
+                'duplicata_2': rowdict.get('duplicata_2'),
+                'duplicata_3': rowdict.get('duplicata_3'),
+                'duplicata_4': rowdict.get('duplicata_4'),
+                'duplicata_5': rowdict.get('duplicata_5'),
+                'duplicata_6': rowdict.get('duplicata_6'),
+                'id': rowdict.get('calculo_id') or rowdict.get('id'),
+                'quantidade_estoque': rowdict.get('quantidade_estoque'),
+                'qtd_cobre': rowdict.get('qtd_cobre'),
+                'qtd_zinco': rowdict.get('qtd_zinco'),
+                'qtd_sucata': rowdict.get('qtd_sucata'),
+                'valor_total_nf': rowdict.get('valor_total_nf'),
+                'mao_de_obra': rowdict.get('mao_de_obra'),
+                'materia_prima': rowdict.get('materia_prima'),
+                'custo_total_manual': rowdict.get('custo_total_manual'),
+                'custo_total': rowdict.get('custo_total'),
+            }
+
+            registros.append(reg)
 
         # formata datas simples
         for reg in registros:
